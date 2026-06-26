@@ -3,11 +3,10 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  root: 'src/renderer',
   plugins: [react()],
   base: './',
   build: {
-    outDir: '../../dist/renderer',
+    outDir: 'dist-electron/renderer',
     emptyOutDir: true,
   },
   resolve: {
