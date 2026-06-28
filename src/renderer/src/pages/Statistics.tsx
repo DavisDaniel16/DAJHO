@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { applyThemeToStyles } from '../styles/theme';
 import { useSales } from '../hooks/useDB';
+import { FileDown, BarChart3, Calendar, DollarSign, TrendingUp, Package, Trophy, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // Componente para barras de progreso
 const ProgressBar = ({ value, max, color, label }: { value: number; max: number; color: string; label?: string }) => {
@@ -37,7 +39,6 @@ export const Statistics = () => {
   const [timeRange, setTimeRange] = useState<'week' | 'month'>('week');
   const [selectedMetric, setSelectedMetric] = useState<'ventas' | 'ganancia'>('ventas');
 
-  // Calcular datos reales desde ventas
   const salesData = useMemo(() => {
     const now = new Date();
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -136,9 +137,36 @@ export const Statistics = () => {
     });
   };
 
+  // Exportar datos a Excel
+  const exportToExcel = async () => {
+    try {
+      const now = new Date();
+      const periodo = timeRange === 'week' ? 'Semanal' : 'Mensual';
+      const fileName = `estadisticas-${periodo.toLowerCase()}-${now.toISOString().split('T')[0]}.xlsx`;
+
+      const wsData = [
+        [`Estadísticas ${periodo} - DAJHO`],
+        [`Generado: ${now.toLocaleDateString('es-ES')}`],
+        [],
+        ['Período', 'Ventas ($)', 'Ganancia ($)'],
+        ...currentData.map(d => [('day' in d ? d.day : d.month), d.ventas, d.ganancia]),
+        [],
+        ['TOTAL', totalVentasPeriodo, totalGananciaPeriodo],
+      ];
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Estadísticas');
+      const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      await window.dajhoAPI.file.saveDialog(fileName, buffer);
+    } catch (err) {
+      console.error('Error al exportar:', err);
+    }
+  };
+
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>📊 Estadísticas</h1>
+      <h1 style={styles.title}><BarChart3 size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Estadísticas</h1>
 
       {/* Controles */}
       <div style={styles.controls}>
@@ -150,7 +178,7 @@ export const Statistics = () => {
               ...(timeRange === 'week' ? styles.controlButtonActive : {}),
             }}
           >
-            📅 Semana
+            Semana
           </button>
           <button
             onClick={() => setTimeRange('month')}
@@ -159,7 +187,7 @@ export const Statistics = () => {
               ...(timeRange === 'month' ? styles.controlButtonActive : {}),
             }}
           >
-            📆 Mes
+            Mes
           </button>
         </div>
         <div style={styles.controlGroup}>
@@ -170,7 +198,7 @@ export const Statistics = () => {
               ...(selectedMetric === 'ventas' ? styles.controlButtonActive : {}),
             }}
           >
-            💰 Ventas
+            Ventas
           </button>
           <button
             onClick={() => setSelectedMetric('ganancia')}
@@ -179,15 +207,22 @@ export const Statistics = () => {
               ...(selectedMetric === 'ganancia' ? styles.controlButtonActive : {}),
             }}
           >
-            📈 Ganancia
+            Ganancia
           </button>
         </div>
+        <button
+          onClick={exportToExcel}
+          style={styles.exportButton}
+          title="Exportar a Excel"
+        >
+          <FileDown size={18} style={{ marginRight: 6 }} /> Exportar datos
+        </button>
       </div>
 
       {/* Resumen */}
       <div style={styles.summary}>
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>💰</div>
+          <DollarSign size={24} color={colors.textSecondary} />
           <div>
             <div style={styles.summaryLabel}>Total ventas</div>
             <div style={styles.summaryValue}>${totalVentasPeriodo.toFixed(2)}</div>
@@ -200,7 +235,7 @@ export const Statistics = () => {
           </div>
         </div>
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>📈</div>
+          <TrendingUp size={24} color={colors.textSecondary} />
           <div>
             <div style={styles.summaryLabel}>Ganancia de ventas</div>
             <div style={styles.summaryValue}>${totalGananciaPeriodo.toFixed(2)}</div>
@@ -213,7 +248,7 @@ export const Statistics = () => {
           </div>
         </div>
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>📊</div>
+          <BarChart3 size={24} color={colors.textSecondary} />
           <div>
             <div style={styles.summaryLabel}>Promedio {selectedMetric === 'ventas' ? 'ventas' : 'ganancia'}</div>
             <div style={styles.summaryValue}>
@@ -223,7 +258,7 @@ export const Statistics = () => {
           </div>
         </div>
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>📦</div>
+          <Package size={24} color={colors.textSecondary} />
           <div>
             <div style={styles.summaryLabel}>Productos más vendidos</div>
             {topProducts.length > 0 ? (
@@ -241,7 +276,7 @@ export const Statistics = () => {
       {/* Gráfico de barras */}
       <div style={styles.chartContainer}>
         <h2 style={styles.chartTitle}>
-          {selectedMetric === 'ventas' ? '💰 Ventas' : '📈 Ganancia'} - {timeRange === 'week' ? 'Semanal' : 'Mensual'}
+          {selectedMetric === 'ventas' ? 'Ventas' : 'Ganancia'} - {timeRange === 'week' ? 'Semanal' : 'Mensual'}
         </h2>
         <div style={styles.chart}>
           {renderBars()}
@@ -250,7 +285,7 @@ export const Statistics = () => {
 
       {/* Productos más vendidos */}
       <div style={styles.topProductsContainer}>
-        <h2 style={styles.chartTitle}>🏆 Productos más vendidos</h2>
+        <h2 style={styles.chartTitle}><Trophy size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Productos más vendidos</h2>
         <div style={styles.topProductsList}>
           {topProducts.map((product, index) => (
             <div key={index} style={styles.topProductItem}>
@@ -280,7 +315,7 @@ export const Statistics = () => {
 
       {/* Detalle de ventas */}
       <div style={styles.detailContainer}>
-        <h2 style={styles.chartTitle}>📋 Detalle de ventas</h2>
+        <h2 style={styles.chartTitle}><FileText size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Detalle de ventas</h2>
         <div style={styles.detailTable}>
           <div style={styles.detailRowHeader}>
             <span style={styles.detailCell}>{timeRange === 'week' ? 'Día' : 'Mes'}</span>
@@ -307,7 +342,6 @@ export const Statistics = () => {
   );
 };
 
-// Estilos
 const baseStyles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '24px',
@@ -344,6 +378,20 @@ const baseStyles: { [key: string]: React.CSSProperties } = {
     backgroundColor: '#4a9eff',
     color: '#ffffff',
     borderColor: '#4a9eff',
+  },
+  exportButton: {
+    padding: '10px 18px',
+    backgroundColor: '#2ecc71',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.3s',
+    whiteSpace: 'nowrap',
   },
   summary: {
     display: 'grid',

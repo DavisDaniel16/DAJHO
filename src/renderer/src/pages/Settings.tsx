@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { applyThemeToStyles } from '../styles/theme';
+import { PasswordConfirm } from '../components/PasswordConfirm';
+import { Store, Settings as SettingsIcon, Package, Database, Shield, Sun, Moon, AlertTriangle, Trash2, Download, Upload, RefreshCw, HardDrive, Wrench, FileText, Save } from 'lucide-react';
 
 // Definir tipos
 interface BusinessInfo {
@@ -19,8 +21,8 @@ interface Preferences {
   language: string;
   darkMode: boolean;
   receiptFooter: string;
-  defaultTax: number;
   lowStockAlert: number;
+  ivaPorcentaje: number;
 }
 
 interface Backup {
@@ -30,22 +32,22 @@ interface Backup {
 }
 
 const defaultBusinessInfo: BusinessInfo = {
-  name: 'Tienda de Ropa DAJHO',
-  owner: 'Tu Novia',
-  phone: '0987654321',
-  email: 'tienda@dajho.com',
-  address: 'Calle Principal 123',
-  city: 'Quito',
-  ruc: '1234567890001',
+  name: 'Nombre de tu negocio',
+  owner: 'Tu nombre',
+  phone: 'Tu número de celular',
+  email: 'tuemail@ejemplo.com',
+  address: 'Tu dirección',
+  city: 'Tu ciudad',
+  ruc: 'Tu RUC/Cédula',
 };
 
 const defaultPreferences: Preferences = {
   currency: 'USD',
   language: 'es',
   darkMode: false,
-  receiptFooter: '¡Gracias por tu compra! 💕',
-  defaultTax: 12,
+  receiptFooter: '¡Gracias por tu compra!',
   lowStockAlert: 5,
+  ivaPorcentaje: 12,
 };
 
 const defaultBackup: Backup = {
@@ -64,11 +66,59 @@ export const Settings = () => {
   const [showSaveAlert, setShowSaveAlert] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
+
+  const [dbPath, setDbPath] = useState('Cargando...');
+
+  useEffect(() => {
+    const loadDbPath = async () => {
+      try {
+        const path = await window.dajhoAPI.system.getDbPath();
+        setDbPath(path || 'No disponible');
+      } catch (err) {
+        console.error('Error al cargar ruta de BD:', err);
+        setDbPath('No disponible');
+      }
+    };
+    loadDbPath();
+  }, []);
+
+  // Cargar info del backup al activar la pestaña
+  useEffect(() => {
+    if (activeTab === 'backup') {
+      const loadBackupInfo = async () => {
+        try {
+          const info = await window.dajhoAPI.backup.info();
+          if (info.exists) {
+            const sizeKB = (info.size / 1024).toFixed(1);
+            const mainSizeKB = (info.mainDbSize / 1024).toFixed(1);
+            setBackup(prev => ({
+              ...prev,
+              lastBackup: `${info.modified} (${sizeKB} KB)`,
+            }));
+          }
+        } catch (err) {
+          console.error('Error al cargar info de backup:', err);
+        }
+      };
+      loadBackupInfo();
+    }
+  }, [activeTab]);
 
   // Cargar datos del negocio desde la BD al iniciar
   useEffect(() => {
     const loadBusiness = async () => {
       try {
+        // Cargar IVA desde settings
+        const ivaVal = await window.dajhoAPI.settings.get('iva_porcentaje');
+        if (ivaVal !== null) {
+          setPreferences(prev => ({ ...prev, ivaPorcentaje: parseFloat(ivaVal) }));
+        }
+        // Cargar idioma desde settings
+        const langVal = await window.dajhoAPI.settings.get('app_language');
+        if (langVal !== null) {
+          setPreferences(prev => ({ ...prev, language: langVal }));
+        }
         const data = await window.dajhoAPI.business.getFirst();
         if (data) {
           setBusinessInfo({
@@ -92,38 +142,60 @@ export const Settings = () => {
 
   // Guardar configuración del negocio en la BD
   const handleSave = async () => {
-    try {
-      await window.dajhoAPI.business.update(businessInfo);
-      setShowSaveAlert(true);
-      setSaveMessage('✅ Configuración guardada exitosamente');
-      setTimeout(() => setShowSaveAlert(false), 3000);
-    } catch (err) {
-      console.error('Error al guardar:', err);
-      alert('❌ Error al guardar la configuración');
-    }
-  };
-
-  // Realizar backup
-  const handleBackup = () => {
-    setShowSaveAlert(true);
-    setSaveMessage('📦 Backup realizado exitosamente');
-    setBackup({
-      ...backup,
-      lastBackup: new Date().toLocaleString('es-ES'),
+    setPendingAction(() => async () => {
+      try {
+        await window.dajhoAPI.business.update(businessInfo);
+        await window.dajhoAPI.settings.set('iva_porcentaje', String(preferences.ivaPorcentaje));
+        await window.dajhoAPI.settings.set('app_language', preferences.language);
+        setShowSaveAlert(true);
+        const langChanged = preferences.language !== 'es';
+        setSaveMessage(langChanged
+          ? 'Configuración guardada. Reinicia la aplicación para aplicar el cambio de idioma.'
+          : 'Configuración guardada exitosamente');
+        setTimeout(() => setShowSaveAlert(false), 4000);
+      } catch (err) {
+        console.error('Error al guardar:', err);
+        alert('Error al guardar la configuración');
+      }
     });
-    setTimeout(() => {
-      setShowSaveAlert(false);
-    }, 3000);
   };
 
-  // Restaurar backup
-  const handleRestore = () => {
-    if (window.confirm('⚠️ ¿Estás seguro de que quieres restaurar desde el backup? Esto sobrescribirá todos los datos actuales.')) {
-      setShowSaveAlert(true);
-      setSaveMessage('🔄 Backup restaurado exitosamente');
-      setTimeout(() => {
-        setShowSaveAlert(false);
-      }, 3000);
+  // Realizar backup (copia física del archivo database.db)
+  const handleBackup = async () => {
+    try {
+      const result = await window.dajhoAPI.backup.manual();
+      if (result.success) {
+        setShowSaveAlert(true);
+        setSaveMessage('Backup físico realizado exitosamente');
+        setBackup({
+          ...backup,
+          lastBackup: new Date().toLocaleString('es-ES'),
+        });
+      } else {
+        alert('Error al crear backup: ' + (result.error || 'Desconocido'));
+      }
+    } catch (err) {
+      alert('Error al crear backup');
+      console.error(err);
+    }
+    setTimeout(() => setShowSaveAlert(false), 3000);
+  };
+
+  // Restaurar backup (requiere reinicio de la app)
+  const handleRestore = async () => {
+    if (window.confirm('¿Estás seguro de que quieres restaurar desde el backup? Esto SOBRESCRIBIRÁ todos los datos actuales. La aplicación se cerrará después de restaurar.')) {
+      try {
+        const result = await window.dajhoAPI.backup.restore();
+        if (result.success) {
+          alert((result.message || 'Backup restaurado. La aplicación se cerrará.'));
+          window.close();
+        } else {
+          alert('Error al restaurar: ' + (result.error || 'Desconocido'));
+        }
+      } catch (err) {
+        alert('Error al restaurar backup');
+        console.error(err);
+      }
     }
   };
 
@@ -143,7 +215,7 @@ export const Settings = () => {
     a.click();
     URL.revokeObjectURL(url);
     setShowSaveAlert(true);
-    setSaveMessage('📤 Datos exportados exitosamente');
+    setSaveMessage('Datos exportados exitosamente');
     setTimeout(() => {
       setShowSaveAlert(false);
     }, 3000);
@@ -161,12 +233,12 @@ export const Settings = () => {
         if (data.business) setBusinessInfo(data.business);
         if (data.preferences) setPreferences(data.preferences);
         setShowSaveAlert(true);
-        setSaveMessage('📥 Datos importados exitosamente');
+        setSaveMessage('Datos importados exitosamente');
         setTimeout(() => {
           setShowSaveAlert(false);
         }, 3000);
       } catch (error) {
-        alert('❌ Error al importar el archivo. Asegúrate de que sea un backup válido.');
+        alert('Error al importar el archivo. Asegúrate de que sea un backup válido.');
       }
     };
     reader.readAsText(file);
@@ -175,11 +247,11 @@ export const Settings = () => {
 
   // Resetear datos
   const handleReset = () => {
-    if (window.confirm('⚠️ ¿Estás seguro de que quieres resetear todos los datos? Esta acción no se puede deshacer.')) {
-      if (window.confirm('⚠️ Confirmación final: ¿Resetear todos los datos?')) {
+    if (window.confirm('¿Estás seguro de que quieres resetear todos los datos? Esta acción no se puede deshacer.')) {
+      if (window.confirm('Confirmación final: ¿Resetear todos los datos?')) {
         // Aquí iría la lógica para resetear la base de datos
         setShowSaveAlert(true);
-        setSaveMessage('🗑️ Todos los datos han sido reseteados');
+        setSaveMessage('Todos los datos han sido reseteados');
         setTimeout(() => {
           setShowSaveAlert(false);
         }, 3000);
@@ -190,7 +262,7 @@ export const Settings = () => {
   // Renderizar pestaña de negocio
   const renderBusinessTab = () => (
     <div style={styles.tabContent}>
-      <h3 style={styles.tabTitle}>🏪 Información del negocio</h3>
+      <h3 style={styles.tabTitle}><Store size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Información del negocio</h3>
       <div style={styles.formGrid}>
         <div style={styles.formGroup}>
           <label style={styles.formLabel}>Nombre del negocio</label>
@@ -262,7 +334,7 @@ export const Settings = () => {
   // Renderizar pestaña de preferencias
   const renderPreferencesTab = () => (
     <div style={styles.tabContent}>
-      <h3 style={styles.tabTitle}>⚙️ Preferencias</h3>
+      <h3 style={styles.tabTitle}><SettingsIcon size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Preferencias</h3>
       <div style={styles.formGrid}>
         <div style={styles.formGroup}>
           <label style={styles.formLabel}>Moneda</label>
@@ -287,8 +359,10 @@ export const Settings = () => {
           >
             <option value="es">Español</option>
             <option value="en">English</option>
-            <option value="pt">Português</option>
           </select>
+          <p style={{ fontSize: '11px', color: '#6b7a8a', margin: '4px 0 0 0' }}>
+            El cambio de idioma se aplica al reiniciar la aplicación
+          </p>
         </div>
         <div style={styles.formGroup}>
           <label style={styles.formLabel}>Modo oscuro</label>
@@ -303,21 +377,24 @@ export const Settings = () => {
                 ...(isDarkMode ? styles.toggleButtonActive : {}),
               }}
             >
-              {isDarkMode ? '🌙 Activo' : '☀️ Inactivo'}
+              {isDarkMode ? 'Activo' : 'Inactivo'}
             </button>
           </div>
         </div>
         <div style={styles.formGroup}>
-          <label style={styles.formLabel}>Impuesto predeterminado (%)</label>
+          <label style={styles.formLabel}>IVA (%)</label>
           <input
             type="number"
-            value={preferences.defaultTax}
-            onChange={(e) => setPreferences({ ...preferences, defaultTax: parseFloat(e.target.value) || 0 })}
+            value={preferences.ivaPorcentaje}
+            onChange={(e) => setPreferences({ ...preferences, ivaPorcentaje: parseFloat(e.target.value) || 0 })}
             style={styles.formInput}
             min="0"
             max="100"
             step="0.5"
           />
+          <span style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4, display: 'block' }}>
+            Porcentaje de IVA que se aplicará en las ventas
+          </span>
         </div>
         <div style={styles.formGroup}>
           <label style={styles.formLabel}>Alerta de stock bajo</label>
@@ -348,7 +425,7 @@ export const Settings = () => {
   // Renderizar pestaña de backup
   const renderBackupTab = () => (
     <div style={styles.tabContent}>
-      <h3 style={styles.tabTitle}>📦 Backup y Restauración</h3>
+      <h3 style={styles.tabTitle}><Package size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Backup y Restauración</h3>
       
       <div style={styles.backupInfo}>
         <div style={styles.backupItem}>
@@ -365,7 +442,7 @@ export const Settings = () => {
                 ...(backup.autoBackup ? styles.toggleButtonActive : {}),
               }}
             >
-              {backup.autoBackup ? '✅ Activado' : '❌ Desactivado'}
+              {backup.autoBackup ? 'Activado' : 'Desactivado'}
             </button>
           </span>
         </div>
@@ -387,17 +464,17 @@ export const Settings = () => {
 
       <div style={styles.backupActions}>
         <button onClick={handleBackup} style={styles.backupButton}>
-          📦 Crear backup ahora
+          <Package size={16} style={{ marginRight: 6 }} /> Crear backup ahora
         </button>
         <button onClick={handleRestore} style={styles.restoreButton}>
-          🔄 Restaurar backup
+          <RefreshCw size={16} style={{ marginRight: 6 }} /> Restaurar backup
         </button>
         <button onClick={handleExport} style={styles.exportButton}>
-          📤 Exportar datos
+          <Upload size={16} style={{ marginRight: 6 }} /> Exportar datos
         </button>
         <div style={styles.importWrapper}>
           <button style={styles.importButton}>
-            📥 Importar datos
+            <Download size={16} style={{ marginRight: 6 }} /> Importar datos
           </button>
           <input
             type="file"
@@ -409,10 +486,10 @@ export const Settings = () => {
       </div>
 
       <div style={styles.dangerZone}>
-        <h4 style={styles.dangerTitle}>⚠️ Zona peligrosa</h4>
+        <h4 style={styles.dangerTitle}><AlertTriangle size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Zona peligrosa</h4>
         <p style={styles.dangerText}>Esta acción eliminará todos los datos de la aplicación.</p>
         <button onClick={handleReset} style={styles.dangerButton}>
-          🗑️ Resetear todos los datos
+          <Trash2 size={16} style={{ marginRight: 6 }} /> Resetear todos los datos
         </button>
       </div>
     </div>
@@ -421,7 +498,7 @@ export const Settings = () => {
   // Renderizar pestaña de base de datos
   const renderDatabaseTab = () => (
     <div style={styles.tabContent}>
-      <h3 style={styles.tabTitle}>🗄️ Base de datos</h3>
+      <h3 style={styles.tabTitle}><Database size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Base de datos</h3>
       
       <div style={styles.dbInfo}>
         <div style={styles.dbItem}>
@@ -452,17 +529,17 @@ export const Settings = () => {
 
       <div style={styles.dbActions}>
         <button style={styles.dbOptimizeButton}>
-          🔧 Optimizar base de datos
+          <Wrench size={16} style={{ marginRight: 6 }} /> Optimizar base de datos
         </button>
         <button style={styles.dbVacuumButton}>
-          🧹 Vaciar base de datos (limpiar espacio)
+          <HardDrive size={16} style={{ marginRight: 6 }} /> Vaciar base de datos (limpiar espacio)
         </button>
       </div>
 
       <div style={styles.dbLocation}>
         <p style={styles.dbLocationText}>
-          📂 Ubicación de la base de datos: <br />
-          <code style={styles.dbLocationCode}>E:\Documentos\PROYECTO DAJHO\data\database.db</code>
+          <FileText size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Ubicación de la base de datos: <br />
+          <code style={styles.dbLocationCode}>{dbPath}</code>
         </p>
       </div>
     </div>
@@ -470,7 +547,7 @@ export const Settings = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>⚙️ Configuraciones</h1>
+      <h1 style={styles.title}><SettingsIcon size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Configuraciones</h1>
 
       {/* Alertas */}
       {showSaveAlert && (
@@ -488,7 +565,7 @@ export const Settings = () => {
             ...(activeTab === 'business' ? styles.tabButtonActive : {}),
           }}
         >
-          🏪 Negocio
+          <Store size={16} style={{ marginRight: 6 }} /> Negocio
         </button>
         <button
           onClick={() => setActiveTab('preferences')}
@@ -497,7 +574,7 @@ export const Settings = () => {
             ...(activeTab === 'preferences' ? styles.tabButtonActive : {}),
           }}
         >
-          ⚙️ Preferencias
+          <SettingsIcon size={16} style={{ marginRight: 6 }} /> Preferencias
         </button>
         <button
           onClick={() => setActiveTab('backup')}
@@ -506,7 +583,7 @@ export const Settings = () => {
             ...(activeTab === 'backup' ? styles.tabButtonActive : {}),
           }}
         >
-          📦 Backup
+          <Package size={16} style={{ marginRight: 6 }} /> Backup
         </button>
         <button
           onClick={() => setActiveTab('database')}
@@ -515,7 +592,7 @@ export const Settings = () => {
             ...(activeTab === 'database' ? styles.tabButtonActive : {}),
           }}
         >
-          🗄️ Base de datos
+          <Database size={16} style={{ marginRight: 6 }} /> Base de datos
         </button>
       </div>
 
@@ -531,9 +608,18 @@ export const Settings = () => {
       {activeTab !== 'backup' && activeTab !== 'database' && (
         <div style={styles.saveContainer}>
           <button onClick={handleSave} style={styles.saveButton}>
-            💾 Guardar configuración
+            <Save size={16} style={{ marginRight: 6 }} /> Guardar configuración
           </button>
         </div>
+      )}
+
+      {pendingAction && (
+        <PasswordConfirm
+          title="Confirmar cambios"
+          message="Ingresa la contraseña del propietario para guardar los cambios"
+          onConfirm={pendingAction}
+          onCancel={() => setPendingAction(null)}
+        />
       )}
     </div>
   );

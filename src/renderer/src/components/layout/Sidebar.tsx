@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSidebar } from '../../context/SidebarContext';
 import {
   ShoppingBag,
   DollarSign,
@@ -12,11 +13,18 @@ import {
   Building2,
   Settings,
   HelpCircle,
+  Rocket,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { FileText } from 'lucide-react';
 
 // Definimos los ítems del menú (con su módulo correspondiente para permisos)
 const menuItems = [
+  { section: 'PANEL PRINCIPAL', items: [
+    { path: '/dashboard', label: 'Inicio', icon: BarChart3, module: 'dashboard' },
+  ]},
   { section: 'GESTIONA TU NEGOCIO', items: [
     { path: '/vender', label: 'Vender', icon: ShoppingBag, module: 'vender' },
     { path: '/cerrar-caja', label: 'Cerrar Caja', icon: DollarSign, module: 'cerrar-caja' },
@@ -29,6 +37,7 @@ const menuItems = [
   { section: 'GESTIONA TUS CONTACTOS', items: [
     { path: '/clientes', label: 'Clientes', icon: User, module: 'clientes' },
     { path: '/proveedores', label: 'Proveedores', icon: Building2, module: 'proveedores' },
+    { path: '/categorias', label: 'Categorías', icon: Package, module: 'categorias' },
     { path: '/configuraciones', label: 'Configuraciones', icon: Settings, module: 'configuraciones' },
     { path: '/ayuda', label: 'Ayuda', icon: HelpCircle, module: 'ayuda' },
     { path: '/recibos', label: 'Recibos', icon: FileText, module: 'recibos' },
@@ -37,70 +46,101 @@ const menuItems = [
 
 export const Sidebar = () => {
   const { hasPermission, user } = useAuth();
+  const { collapsed, toggle } = useSidebar();
 
-  // Verificar si el usuario tiene acceso a inventario (admin o vendedor con solo lectura)
   const hasInventoryAccess = hasPermission('inventario') || hasPermission('inventario-view');
 
   // Filtrar ítems según permisos
   const filteredMenuItems = menuItems.map(section => ({
     ...section,
     items: section.items.filter(item => {
-      // Si es el módulo de inventario, usar la lógica especial
       if (item.module === 'inventario') {
         return hasInventoryAccess;
       }
-      // Para el resto de módulos, verificar permiso normal
       return hasPermission(item.module);
     }),
   })).filter(section => section.items.length > 0);
 
-  // Obtener información del usuario para mostrar en el sidebar
   const getUserRoleLabel = () => {
     if (!user) return '';
-    if (user.role === 'owner') return '👑 Propietario';
-    return '👤 Empleado';
+    if (user.role === 'owner') return 'Propietario';
+    return 'Empleado';
   };
 
+  const s = collapsed ? stylesCollapsed : styles;
+
   return (
-    <aside style={styles.sidebar}>
-      <div style={styles.logoContainer}>
-        <h2 style={styles.logo}>🚀 DAJHO</h2>
-        {user && (
-          <div style={styles.userInfo}>
-            <span style={styles.userName}>{user.name}</span>
-            <span style={styles.userRole}>{getUserRoleLabel()}</span>
-          </div>
+    <aside style={{ ...s.sidebar, width: collapsed ? 60 : 240 }}>
+      {/* Logo */}
+      <div style={s.logoContainer}>
+        {collapsed ? (
+          <Rocket size={22} style={{ color: '#ffffff' }} />
+        ) : (
+          <>
+            <h2 style={s.logo}><Rocket size={22} style={{ marginRight: 8, verticalAlign: 'middle' }} /> DAJHO</h2>
+            {user && (
+              <div style={s.userInfo}>
+                <span style={s.userName}>{user.name}</span>
+                <span style={s.userRole}>{getUserRoleLabel()}</span>
+              </div>
+            )}
+          </>
         )}
       </div>
       
-      {filteredMenuItems.map((section, idx) => (
-        <div key={idx} style={styles.section}>
-          <p style={styles.sectionTitle}>{section.section}</p>
-          {section.items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                style={({ isActive }) => ({
-                  ...styles.link,
-                  ...(isActive ? styles.linkActive : {})
-                })}
-              >
-                <Icon size={18} style={styles.icon} />
-                {item.label}
-                {/* Mostrar indicador de solo lectura en inventario para vendedores */}
-                {item.module === 'inventario' && user?.role === 'employee' && (
-                  <span style={styles.readOnlyBadge}>🔍</span>
-                )}
-              </NavLink>
-            );
-          })}
-        </div>
-      ))}
+      {/* Items del menú - scroll independiente */}
+      <div style={s.menuScroll}>
+        {filteredMenuItems.map((section, idx) => (
+          <div key={idx} style={s.section}>
+            {!collapsed && <p style={s.sectionTitle}>{section.section}</p>}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  style={({ isActive }) => ({
+                    ...s.link,
+                    ...(isActive ? s.linkActive : {}),
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    padding: collapsed ? '12px 0' : '10px 20px',
+                  })}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <Icon size={18} style={collapsed ? { margin: 0 } : s.icon} />
+                  {!collapsed && item.label}
+                  {!collapsed && item.module === 'inventario' && user?.role === 'employee' && (
+                    <Search size={14} style={{ marginLeft: 'auto', opacity: 0.7, color: '#f59e0b' }} />
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        ))}
+      </div>
       
-      <div style={styles.footer}>
-        <p style={styles.version}>v1.0.0</p>
+      {/* Footer con botón colapsar */}
+      <div style={s.footer}>
+        {!collapsed && <p style={s.version}>v1.0.0</p>}
+        <button
+          onClick={toggle}
+          title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#6b7a8a',
+            cursor: 'pointer',
+            padding: collapsed ? '8px 0' : '4px 0 0 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'center',
+            width: '100%',
+            gap: '6px',
+            fontSize: '12px',
+          }}
+        >
+          {collapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={14} /> Colapsar</>}
+        </button>
       </div>
     </aside>
   );
@@ -115,44 +155,55 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#b0b8c4',
     display: 'flex',
     flexDirection: 'column',
-    padding: '20px 0',
+    padding: '0',
     position: 'fixed',
     top: 0,
     left: 0,
-    overflowY: 'auto',
+    overflow: 'hidden',
     boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
     zIndex: 100,
+    transition: 'width 0.25s ease',
   },
+  toggleBtn: {}, // No se usa, el botón está inline en el footer
   logoContainer: {
-    padding: '0 20px 20px 20px',
+    padding: '16px 20px',
     borderBottom: '1px solid #2a3a4a',
-    marginBottom: '20px',
+    flexShrink: 0,
   },
   logo: {
     color: '#ffffff',
     fontSize: '22px',
     fontWeight: '700',
     margin: 0,
-    marginBottom: '8px',
+    whiteSpace: 'nowrap',
   },
   userInfo: {
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
     paddingTop: '8px',
+    marginTop: '8px',
     borderTop: '1px solid #2a3a4a',
   },
   userName: {
     fontSize: '14px',
     fontWeight: '500',
     color: '#ffffff',
+    whiteSpace: 'nowrap',
   },
   userRole: {
     fontSize: '12px',
     color: '#6b7a8a',
+    whiteSpace: 'nowrap',
+  },
+  menuScroll: {
+    flex: 1,
+    overflowY: 'auto' as const,
+    overflowX: 'hidden',
+    padding: '8px 0',
   },
   section: {
-    marginBottom: '20px',
+    marginBottom: '8px',
   },
   sectionTitle: {
     fontSize: '11px',
@@ -160,8 +211,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     letterSpacing: '0.5px',
     color: '#6b7a8a',
     padding: '0 20px',
-    marginBottom: '8px',
+    marginBottom: '4px',
     textTransform: 'uppercase',
+    whiteSpace: 'nowrap',
   },
   link: {
     display: 'flex',
@@ -173,7 +225,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s',
     cursor: 'pointer',
     borderLeft: '3px solid transparent',
-    position: 'relative',
+    whiteSpace: 'nowrap',
   },
   linkActive: {
     backgroundColor: '#2a3a4a',
@@ -192,14 +244,56 @@ const styles: { [key: string]: React.CSSProperties } = {
     opacity: 0.7,
   },
   footer: {
-    marginTop: 'auto',
-    padding: '20px 20px 0',
+    padding: '12px 20px',
     borderTop: '1px solid #2a3a4a',
     textAlign: 'center',
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '6px',
   },
   version: {
     fontSize: '12px',
     color: '#6b7a8a',
     margin: 0,
-  }
+  },
+};
+
+const stylesCollapsed: { [key: string]: React.CSSProperties } = {
+  ...styles,
+  sidebar: {
+    ...styles.sidebar,
+    width: '60px',
+  },
+  logoContainer: {
+    ...styles.logoContainer,
+    padding: '12px 0',
+    textAlign: 'center',
+  },
+  menuScroll: {
+    ...styles.menuScroll,
+    padding: '4px 0',
+  },
+  section: {
+    marginBottom: '0',
+  },
+  link: {
+    ...styles.link,
+    padding: '12px 0',
+    justifyContent: 'center',
+    borderLeft: '3px solid transparent',
+  },
+  linkActive: {
+    backgroundColor: '#2a3a4a',
+    color: '#ffffff',
+    borderLeft: '3px solid #4a9eff',
+  },
+  icon: {
+    margin: 0,
+  },
+  footer: {
+    ...styles.footer,
+    padding: '8px 0',
+  },
 };

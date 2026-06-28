@@ -23,48 +23,91 @@ export interface Recibo {
   negocioRuc: string;
 }
 
-// ─── Clave en localStorage ───────────────────────────────
+// ─── Recibos (persistencia en SQLite vía IPC) ────────────
+// Fallback a localStorage si el IPC no está disponible (desarrollo)
+
 const RECIBOS_KEY = 'dajho_recibos';
 
-// ─── Recibos ─────────────────────────────────────────────
-export function getRecibos(): Recibo[] {
+async function getDB(): Promise<Window['dajhoAPI']['recibos'] | null> {
+  try {
+    if (window.dajhoAPI?.recibos) return window.dajhoAPI.recibos;
+  } catch { /* ignore */ }
+  return null;
+}
+
+// ─── Obtener todos los recibos ───────────────────────────
+export async function getRecibos(): Promise<Recibo[]> {
+  try {
+    const db = await getDB();
+    if (db) {
+      return await db.getAll();
+    }
+  } catch { /* fallback */ }
+  // Fallback a localStorage
   try {
     const raw = localStorage.getItem(RECIBOS_KEY);
     return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
-export function saveRecibo(recibo: Recibo): void {
-  const list = getRecibos();
-  list.unshift(recibo); // más reciente primero
-  localStorage.setItem(RECIBOS_KEY, JSON.stringify(list));
+// ─── Guardar un recibo ───────────────────────────────────
+export async function saveRecibo(recibo: Recibo): Promise<void> {
+  try {
+    const db = await getDB();
+    if (db) {
+      await db.save(recibo);
+      return;
+    }
+  } catch { /* fallback */ }
+  // Fallback a localStorage
+  try {
+    const list: Recibo[] = JSON.parse(localStorage.getItem(RECIBOS_KEY) || '[]');
+    list.unshift(recibo);
+    localStorage.setItem(RECIBOS_KEY, JSON.stringify(list));
+  } catch { /* ignore */ }
 }
 
-export function getReciboById(id: string): Recibo | undefined {
-  return getRecibos().find((r) => r.id === id);
-}
-
-export function buscarRecibos(query: string): Recibo[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return getRecibos();
-  return getRecibos().filter(
-    (r) =>
+// ─── Buscar recibos ─────────────────────────────────────
+export async function buscarRecibos(query: string): Promise<Recibo[]> {
+  try {
+    const db = await getDB();
+    if (db) {
+      if (!query.trim()) return await db.getAll();
+      return await db.search(query);
+    }
+  } catch { /* fallback */ }
+  // Fallback a localStorage
+  try {
+    const raw = localStorage.getItem(RECIBOS_KEY);
+    const list: Recibo[] = raw ? JSON.parse(raw) : [];
+    if (!query.trim()) return list;
+    const q = query.toLowerCase().trim();
+    return list.filter(r =>
       r.cliente.toLowerCase().includes(q) ||
       r.numero.toLowerCase().includes(q) ||
       r.vendedor.toLowerCase().includes(q)
-  );
+    );
+  } catch { return []; }
 }
 
-// ─── Generar IDs / números ───────────────────────────────
-export function generarNumeroRecibo(): string {
-  const now = new Date();
-  const año = now.getFullYear().toString().slice(-2);
-  const mes = String(now.getMonth() + 1).padStart(2, '0');
-  const dia = String(now.getDate()).padStart(2, '0');
-  const correlativo = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-  return `R${año}${mes}${dia}-${correlativo}`;
+// ─── Generar número secuencial RIMPE ─────────────────────
+// Formato oficial SRI: 001-001-XXXXXX
+// El contador se almacena en la BD (settings.recibo_secuencial = '0')
+export async function generarNumeroRecibo(): Promise<string> {
+  try {
+    if (window.dajhoAPI?.recibos?.nextNumero) {
+      const numero = await window.dajhoAPI.recibos.nextNumero();
+      // Verificar que sea un string válido con el formato esperado
+      if (typeof numero === 'string' && numero.startsWith('001-001-')) {
+        return numero;
+      }
+    }
+  } catch (err) {
+    console.error('Error al obtener número secuencial:', err);
+  }
+  // Fallback seguro: timestamp si falla la BD
+  const fallback = String(Date.now()).slice(-6);
+  return `001-001-${fallback}`;
 }
 
 export function generarId(): string {

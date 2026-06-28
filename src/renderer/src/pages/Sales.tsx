@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { useProducts, useSales } from '../hooks/useDB';
+import { useProducts, useSales, Product } from '../hooks/useDB';
 import { saveRecibo, generarNumeroRecibo, generarId } from '../store/recibosStore';
 import { ReciboPDF } from '../components/ReciboPDF';
 import { PDFDownloadLink } from '@react-pdf/renderer';
+import { ShoppingCart, Trash2, Search, X, XCircle, CheckCircle, DollarSign, Building, Loader, FileText } from 'lucide-react';
 
-// ─── Types ───────────────────────────────────────────────
 interface CartItem {
   product: any;
   quantity: number;
+  price: number; // Precio de venta real (puede diferir del precio base)
 }
 
-// ─── Helper para estilos temáticos ─────────────────────
 const useSalesStyles = () => {
   const { colors } = useTheme();
   return useMemo(() => ({
@@ -84,7 +84,6 @@ const useSalesStyles = () => {
   }), [colors]);
 };
 
-// ─── Component ────────────────────────────────────────────
 export const Sales = () => {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -98,23 +97,58 @@ export const Sales = () => {
   const [showNotaVenta, setShowNotaVenta] = useState(false);
   const [ventaRecibo, setVentaRecibo] = useState<any>(null);
   const [cliente, setCliente] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [ivaPorcentaje, setIvaPorcentaje] = useState(0);
+  const [editingPriceId, setEditingPriceId] = useState<number | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const negocioData = {
-    nombre: 'Tienda de Ropa DAJHO',
-    ruc: '1234567890001',
-    direccion: 'Calle Principal 123',
-    telefono: '0987654321',
-    email: 'tienda@dajho.com',
-  };
+    useEffect(() => {
+    const cargarIVA = async () => {
+      try {
+        const iva = await window.dajhoAPI.settings.get('iva_porcentaje');
+        setIvaPorcentaje(iva ? parseFloat(iva) : 0);
+      } catch {
+        setIvaPorcentaje(0);
+      }
+    };
+    cargarIVA();
+  }, []);
 
-  // ── Sincronizar productos desde BD ──
+    const [negocioData, setNegocioData] = useState({
+    nombre: 'Nombre de tu negocio',
+    ruc: 'Tu RUC/Cédula',
+    direccion: 'Tu dirección',
+    telefono: 'Tu número de celular',
+    email: 'tuemail@ejemplo.com',
+  });
+
   useEffect(() => {
+    const cargarNegocio = async () => {
+      try {
+        const data = await window.dajhoAPI.business.getFirst();
+        if (data) {
+          setNegocioData({
+            nombre: data.name || negocioData.nombre,
+            ruc: data.ruc || negocioData.ruc,
+            direccion: data.address || negocioData.direccion,
+            telefono: data.phone || negocioData.telefono,
+            email: data.email || negocioData.email,
+          });
+        }
+      } catch (err) {
+        console.error('Error al cargar datos del negocio:', err);
+      }
+    };
+    cargarNegocio();
+  }, []);
+
+    useEffect(() => {
     setFilteredProducts(products);
   }, [products]);
 
-  // ── Filtro por búsqueda ──
-  useEffect(() => {
+    useEffect(() => {
     const q = search.toLowerCase().trim();
     if (!q) {
       setFilteredProducts(products);
@@ -157,24 +191,31 @@ export const Sales = () => {
     }
   }, [search]);
 
-  // ── Helpers del carrito ──
-  const addToCart = (product: Product) => {
+    const addToCart = (product: Product) => {
     setCart((prev) => {
       const exist = prev.find((i) => i.product.id === product.id);
       if (exist) {
+        if (exist.quantity >= product.stock) {
+          return prev;
+        }
         return prev.map((i) =>
           i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      if (product.stock <= 0) return prev;
+      return [...prev, { product, quantity: 1, price: product.price }];
     });
   };
 
   const updateQty = (id: number, delta: number) => {
     setCart((prev) =>
-      prev.map((i) =>
-        i.product.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i
-      )
+      prev.map((i) => {
+        if (i.product.id !== id) return i;
+        const newQty = Math.max(1, i.quantity + delta);
+        // No permitir superar el stock disponible
+        if (delta > 0 && newQty > i.product.stock) return i;
+        return { ...i, quantity: newQty };
+      })
     );
   };
 
@@ -182,9 +223,12 @@ export const Sales = () => {
     setCart((prev) => prev.filter((i) => i.product.id !== id));
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => {
+    setCart([]);
+    setEditingPriceId(null);
+  };
 
-  const total = cart.reduce((s, i) => s + i.product.price * i.quantity, 0);
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
   const finishSale = async () => {
     if (cart.length === 0) return;
@@ -195,11 +239,12 @@ export const Sales = () => {
     const productos = cart.map((item) => ({
       name: item.product.name,
       quantity: item.quantity,
-      price: item.product.price,
-      subtotal: item.product.price * item.quantity,
+      price: item.price,
+      subtotal: item.price * item.quantity,
     }));
     const subtotal = productos.reduce((s, p) => s + p.subtotal, 0);
-    const iva = 12;
+    // Asegurar que ivaPorcentaje sea un número válido para evitar NaN
+    const iva = typeof ivaPorcentaje === 'number' && !isNaN(ivaPorcentaje) ? ivaPorcentaje : 0;
     const total = subtotal + subtotal * (iva / 100);
 
     // Guardar en BD
@@ -210,13 +255,14 @@ export const Sales = () => {
         subtotal,
         iva: subtotal * (iva / 100),
         total,
-        payment_method: 'Efectivo',
+        payment_method: paymentMethod,
+        payment_reference: paymentReference,
         status: 'completed',
         items: cart.map((item) => ({
           product_id: item.product.id,
           quantity: item.quantity,
-          price: item.product.price,
-          subtotal: item.product.price * item.quantity,
+          price: item.price,
+          subtotal: item.price * item.quantity,
         })),
       });
     } catch (err) {
@@ -226,7 +272,7 @@ export const Sales = () => {
     // Guardar recibo en el historial local
     const recibo = {
       id: generarId(),
-      numero: generarNumeroRecibo(),
+      numero: await generarNumeroRecibo(),
       fecha: now.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
       fechaRaw: now.toISOString(),
       hora: timeStr,
@@ -235,12 +281,12 @@ export const Sales = () => {
       subtotal,
       iva,
       total,
-      metodoPago: 'Efectivo',
+      metodoPago: paymentMethod,
       vendedor: user?.name || 'Vendedor',
-      negocioNombre: 'Tienda de Ropa DAJHO',
-      negocioRuc: '1234567890001',
+      negocioNombre: negocioData.nombre,
+      negocioRuc: negocioData.ruc,
     };
-    saveRecibo(recibo);
+    await saveRecibo(recibo);
 
     // Guardar recibo para posible Nota de Venta
     setVentaRecibo(recibo);
@@ -253,17 +299,27 @@ export const Sales = () => {
     setShowNotaVenta(false);
     setVentaRecibo(null);
     setCliente('');
+    setPaymentMethod('Efectivo');
+    setPaymentReference('');
     clearCart();
+  };
+
+  const renderPaymentButton = (metodo: string) => {
+    if (metodo === 'Efectivo') return React.createElement('span', null, React.createElement(DollarSign, { size: 16, style: { marginRight: 4 } }), ' Efectivo');
+    return React.createElement('span', null, React.createElement(Building, { size: 16, style: { marginRight: 4 } }), ' Transferencia');
+  };
+  const renderPdfLink = (loading: boolean) => {
+    if (loading) return React.createElement('span', null, React.createElement(Loader, { size: 16, style: { marginRight: 6 } }), ' Generando PDF');
+    return React.createElement('span', null, React.createElement(FileText, { size: 16, style: { marginRight: 6 } }), ' Descargar Nota de Venta');
   };
 
   return (
     <div style={s.wrapper}>
-      {/* ── Columna izquierda: búsqueda + productos ── */}
       <div style={s.leftCol}>
-        <h1 style={s.title}>🛒 Nueva venta</h1>
+        <h1 style={s.title}><ShoppingCart size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Nueva venta</h1>
 
         <div style={s.searchBox}>
-          <span style={s.searchIcon}>🔍</span>
+          <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
           <input
             ref={searchRef}
             type="text"
@@ -275,7 +331,7 @@ export const Sales = () => {
           />
           {search && (
             <button onClick={() => setSearch('')} style={s.clearSearch}>
-              ✕
+              <X size={16} />
             </button>
           )}
         </div>
@@ -307,18 +363,17 @@ export const Sales = () => {
             </div>
           ))}
           {filteredProducts.length === 0 && (
-            <p style={s.emptyMsg}>❌ No se encontraron productos</p>
+            <p style={s.emptyMsg}><XCircle size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} /> No se encontraron productos</p>
           )}
         </div>
       </div>
 
-      {/* ── Columna derecha: carrito ── */}
       <div style={s.rightCol}>
         <div style={s.cartHeader}>
-          <h2 style={s.cartTitle}>🛍️ Canasta ({cart.length})</h2>
+          <h2 style={s.cartTitle}><ShoppingCart size={20} style={{ marginRight: 6 }} /> Carrito ({cart.length})</h2>
           {cart.length > 0 && (
             <button onClick={clearCart} style={s.clearCartBtn}>
-              🗑️ Vaciar canasta
+              <Trash2 size={16} style={{ marginRight: 4 }} /> Vaciar carrito
             </button>
           )}
         </div>
@@ -328,9 +383,57 @@ export const Sales = () => {
             <div key={item.product.id} style={s.cartRow}>
               <div style={s.cartRowInfo}>
                 <span style={s.cartRowName}>{item.product.name}</span>
-                <span style={s.cartRowUnit}>
-                  ${item.product.price.toFixed(2)} c/u
-                </span>
+                <div style={s.cartRowUnit}>
+                  {editingPriceId === item.product.id ? (
+                    <input
+                      type="number"
+                      value={editingPriceValue}
+                      onChange={(e) => setEditingPriceValue(e.target.value)}
+                      onBlur={() => {
+                        const newPrice = parseFloat(editingPriceValue);
+                        if (!isNaN(newPrice) && newPrice > 0) {
+                          setCart((prev) =>
+                            prev.map((i) =>
+                              i.product.id === item.product.id ? { ...i, price: newPrice } : i
+                            )
+                          );
+                        }
+                        setEditingPriceId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).blur();
+                        }
+                        if (e.key === 'Escape') {
+                          setEditingPriceId(null);
+                        }
+                      }}
+                      style={{
+                        width: 80,
+                        padding: '2px 6px',
+                        fontSize: 13,
+                        border: `1px solid ${colors.accent}`,
+                        borderRadius: 4,
+                        outline: 'none',
+                        backgroundColor: colors.bgInput,
+                        color: colors.textHeading,
+                        textAlign: 'right',
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      onClick={() => {
+                        setEditingPriceId(item.product.id);
+                        setEditingPriceValue(String(item.price));
+                      }}
+                      style={{ cursor: 'pointer', borderBottom: `1px dashed ${colors.borderInput}`, padding: '0 2px' }}
+                      title="Click para cambiar precio"
+                    >
+                      ${item.price.toFixed(2)} c/u
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div style={s.cartRowQty}>
@@ -350,22 +453,22 @@ export const Sales = () => {
               </div>
 
               <span style={s.cartRowSubtotal}>
-                ${(item.product.price * item.quantity).toFixed(2)}
+                ${(item.price * item.quantity).toFixed(2)}
               </span>
 
               <button
                 onClick={() => removeItem(item.product.id)}
                 style={s.removeBtn}
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
           ))}
 
           {cart.length === 0 && (
             <div style={s.emptyCart}>
-              <span style={s.emptyCartIcon}>🛒</span>
-              <p>La canasta está vacía</p>
+              <ShoppingCart size={40} color={colors.textSecondary} style={{ marginBottom: 8 }} />
+              <p>El carrito está vacío</p>
               <p style={s.emptyCartHint}>
                 Busque productos y presione <strong>Agregar</strong>
               </p>
@@ -373,8 +476,7 @@ export const Sales = () => {
           )}
         </div>
 
-        {/* ── Footer total ── */}
-        <div style={s.footer}>
+          <div style={s.footer}>
           <div style={s.totalRow}>
             <span style={s.totalLabel}>Total</span>
             <span style={s.totalValue}>${total.toFixed(2)}</span>
@@ -392,11 +494,10 @@ export const Sales = () => {
         </div>
       </div>
 
-      {/* ── Modal finalizar venta ── */}
       {showModal && (
         <div style={s.modalOverlay} onClick={() => setShowModal(false)}>
           <div style={s.modal} onClick={(e) => e.stopPropagation()}>
-            <h2 style={s.modalTitle}>✅ Finalizar venta</h2>
+            <h2 style={s.modalTitle}><CheckCircle size={20} style={{ marginRight: 8, verticalAlign: 'middle', color: '#22c55e' }} /> Finalizar venta</h2>
 
             <div style={s.modalBody}>
               {/* Cliente */}
@@ -420,7 +521,71 @@ export const Sales = () => {
                     color: colors.textHeading,
                   }}
                   placeholder="Nombre del cliente (opcional)"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
                 />
+              </div>
+
+              {/* Método de pago */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 500, color: colors.textHeading, display: 'block', marginBottom: 4 }}>
+                  Método de pago
+                </label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['Efectivo', 'Transferencia'].map((metodo) => (
+                    <button
+                      key={metodo}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod(metodo);
+                        if (metodo !== 'Transferencia') setPaymentReference('');
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: 13,
+                        fontWeight: paymentMethod === metodo ? 600 : 400,
+                        border: `2px solid ${paymentMethod === metodo ? colors.accent : colors.borderInput}`,
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        backgroundColor: paymentMethod === metodo ? colors.accent + '20' : colors.bgInput,
+                        color: paymentMethod === metodo ? colors.accent : colors.textHeading,
+                        transition: 'all 0.2s',
+                        flex: 1,
+                        minWidth: 100,
+                      }}
+                    >
+                      {renderPaymentButton(metodo)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Campo de comprobante para Transferencia */}
+                {paymentMethod === 'Transferencia' && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: colors.textHeading, display: 'block', marginBottom: 4 }}>
+                      N° de comprobante de transferencia *
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        fontSize: 14,
+                        border: `1px solid ${colors.borderInput}`,
+                        borderRadius: 6,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        backgroundColor: colors.bgInput,
+                        color: colors.textHeading,
+                      }}
+                      placeholder="Ej. TRANS-123456"
+                      autoComplete="off"
+                    />
+                  </div>
+                )}
               </div>
 
               {cart.map((item) => (
@@ -428,7 +593,7 @@ export const Sales = () => {
                   <span>
                     {item.product.name} <strong>×{item.quantity}</strong>
                   </span>
-                  <span>${(item.product.price * item.quantity).toFixed(2)}</span>
+                  <span>${(item.price * item.quantity).toFixed(2)}</span>
                 </div>
               ))}
               <div style={s.modalDivider} />
@@ -440,7 +605,7 @@ export const Sales = () => {
 
             <div style={s.modalActions}>
               <button onClick={finishSale} style={s.modalConfirm}>
-                💵 Cobrar ${total.toFixed(2)}
+                <DollarSign size={18} style={{ marginRight: 6 }} /> Cobrar ${total.toFixed(2)}
               </button>
               <button onClick={() => setShowModal(false)} style={s.modalCancel}>
                 Seguir comprando
@@ -450,12 +615,11 @@ export const Sales = () => {
         </div>
       )}
 
-      {/* ── Modal Nota de Venta ── */}
       {showNotaVenta && ventaRecibo && (
         <div style={s.modalOverlay}>
           <div style={s.modal}>
             <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+              <CheckCircle size={48} color="#22c55e" style={{ marginBottom: 8 }} />
               <h2 style={s.modalTitle}>Venta completada</h2>
               <p style={{ color: colors.textSecondary, marginBottom: 8 }}>
                 Recibo <strong>{ventaRecibo.numero}</strong> — ${ventaRecibo.total.toFixed(2)}
@@ -484,10 +648,10 @@ export const Sales = () => {
                 fileName={`nota-venta-${ventaRecibo.numero}.pdf`}
                 style={{ ...s.modalConfirm, textDecoration: 'none', display: 'block', textAlign: 'center' }}
               >
-                {({ loading }) => (loading ? '⏳ Generando PDF...' : '📄 Descargar Nota de Venta')}
+                {({ loading }) => renderPdfLink(loading)}
               </PDFDownloadLink>
               <button onClick={handleCerrarNotaVenta} style={s.modalCancel}>
-                ❌ Cerrar
+                <X size={16} style={{ marginRight: 6 }} /> Cerrar
               </button>
             </div>
           </div>

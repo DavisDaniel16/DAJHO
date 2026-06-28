@@ -2,15 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { applyThemeToStyles } from '../styles/theme';
 import { Recibo, buscarRecibos } from '../store/recibosStore';
-
-// ─── Datos del negocio ──────────────────────────────────
-const negocioData = {
-  nombre: 'Tienda de Ropa DAJHO',
-  ruc: '1234567890001',
-  direccion: 'Calle Principal 123, Quito',
-  telefono: '0987654321',
-  email: 'tienda@dajho.com',
-};
+import { FileText, Search, X, Eye, Inbox } from 'lucide-react';
 
 export const Recibos = () => {
   const { colors } = useTheme();
@@ -25,27 +17,57 @@ export const Recibos = () => {
     modalSubmit: { ...themedStyles.modalSubmit, backgroundColor: colors.buttonPrimary, color: colors.textOnPrimary },
   };
 
-  // ── Estado: Historial ──
+  // ── Cargar datos del negocio desde la BD ──
+  const [negocioData, setNegocioData] = useState({
+    nombre: 'Nombre de tu negocio',
+    ruc: 'Tu RUC/Cédula',
+    direccion: 'Tu dirección',
+    telefono: 'Tu número de celular',
+    email: 'tuemail@ejemplo.com',
+  });
+
+  useEffect(() => {
+    const cargarNegocio = async () => {
+      try {
+        const data = await window.dajhoAPI.business.getFirst();
+        if (data) {
+          setNegocioData({
+            nombre: data.name || negocioData.nombre,
+            ruc: data.ruc || negocioData.ruc,
+            direccion: data.address || negocioData.direccion,
+            telefono: data.phone || negocioData.telefono,
+            email: data.email || negocioData.email,
+          });
+        }
+      } catch (err) {
+        console.error('Error al cargar datos del negocio:', err);
+      }
+    };
+    cargarNegocio();
+  }, []);
+
   const [historial, setHistorial] = useState<Recibo[]>([]);
   const [busquedaHistorial, setBusquedaHistorial] = useState('');
 
-  // ── Estado: Modal detalle recibo ──
   const [reciboDetalle, setReciboDetalle] = useState<Recibo | null>(null);
 
   // ── Cargar datos ──
   useEffect(() => {
-    setHistorial(buscarRecibos(busquedaHistorial));
+    const cargarHistorial = async () => {
+      const data = await buscarRecibos(busquedaHistorial);
+      setHistorial(data);
+    };
+    cargarHistorial();
   }, [busquedaHistorial]);
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>📋 Recibos</h1>
+      <h1 style={styles.title}><FileText size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Recibos</h1>
       <div style={styles.card}>
-          <h2 style={styles.cardTitle}>📋 Historial de Recibos</h2>
+          <h2 style={styles.cardTitle}><FileText size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Historial de Recibos</h2>
 
-          {/* Buscador */}
-          <div style={styles.searchBox}>
-            <span style={styles.searchIcon}>🔍</span>
+              <div style={styles.searchBox}>
+            <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
             <input
               type="text"
               value={busquedaHistorial}
@@ -54,14 +76,14 @@ export const Recibos = () => {
               placeholder="Buscar por cliente, número o vendedor..."
             />
             {busquedaHistorial && (
-              <button onClick={() => setBusquedaHistorial('')} style={styles.clearBtn}>✕</button>
+              <button onClick={() => setBusquedaHistorial('')} style={styles.clearBtn}><X size={16} /></button>
             )}
           </div>
 
           {/* Tabla */}
           {historial.length === 0 ? (
             <div style={styles.emptyState}>
-              <span style={{ fontSize: 48 }}>📭</span>
+              <Inbox size={48} color={colors.textSecondary} style={{ marginBottom: 8 }} />
               <p>No hay recibos registrados</p>
               <p style={{ color: '#999', fontSize: 13 }}>
                 {busquedaHistorial ? 'Intenta con otro término de búsqueda' : 'Los recibos se generan automáticamente al realizar una venta en la sección Vender'}
@@ -91,7 +113,7 @@ export const Recibos = () => {
                       onClick={() => setReciboDetalle(r)}
                       style={styles.smallBtn}
                       title="Ver detalle"
-                    >👁️</button>
+                    ><Eye size={16} /></button>
                   </span>
                 </div>
               ))}
@@ -105,7 +127,7 @@ export const Recibos = () => {
       {reciboDetalle && (
         <div style={styles.modalOverlay} onClick={() => setReciboDetalle(null)}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <h2 style={styles.modalTitle}>📋 Detalle del Recibo</h2>
+            <h2 style={styles.modalTitle}><FileText size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Detalle del Recibo</h2>
             <div style={styles.detailGrid}>
               <div style={styles.detailRow}>
                 <span style={styles.detailLabel}>Número:</span>
@@ -173,7 +195,6 @@ export const Recibos = () => {
   );
 };
 
-// ─── Estilos ────────────────────────────────────────────
 const baseStyles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '24px',

@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { applyThemeToStyles } from '../styles/theme';
 import { useExpenses } from '../hooks/useDB';
+import { Edit, Trash2, Plus, Search, Bus, Hotel, UtensilsCrossed, ShoppingBag, Store, Package, MapPin, DollarSign, CreditCard, Building, TrendingDown } from 'lucide-react';
 
 interface ExpenseForm {
   date: string;
@@ -11,6 +12,7 @@ interface ExpenseForm {
   payment_method: string;
   city: string;
   notes: string;
+  supplier: string;
 }
 
 const emptyForm = (): ExpenseForm => ({
@@ -21,16 +23,17 @@ const emptyForm = (): ExpenseForm => ({
   payment_method: 'cash',
   city: '',
   notes: '',
+  supplier: '',
 });
 
 // Resumen por categoría
 const categoryLabels = {
-  transport: { label: '🚌 Transporte', color: '#3b82f6' },
-  lodging: { label: '🏨 Hospedaje', color: '#8b5cf6' },
-  food: { label: '🍽️ Alimentación', color: '#f59e0b' },
-  merchandise: { label: '👕 Mercadería', color: '#2ecc71' },
-  store: { label: '🏪 Tienda', color: '#e74c3c' },
-  other: { label: '📦 Otros', color: '#6b7a8a' },
+  transport: { label: 'Transporte', color: '#3b82f6' },
+  lodging: { label: 'Hospedaje', color: '#8b5cf6' },
+  food: { label: 'Alimentación', color: '#f59e0b' },
+  merchandise: { label: 'Mercadería', color: '#2ecc71' },
+  store: { label: 'Tienda', color: '#e74c3c' },
+  other: { label: 'Otros', color: '#6b7a8a' },
 };
 
 const paymentLabels = {
@@ -92,7 +95,6 @@ export const Expenses = () => {
     setForm(emptyForm());
   };
 
-  // Editar gasto
   const handleEditExpense = (expense: any) => {
     setEditingId(expense.id);
     setForm({
@@ -103,8 +105,14 @@ export const Expenses = () => {
       payment_method: expense.payment_method || 'cash',
       city: expense.city || '',
       notes: expense.notes || '',
+      supplier: expense.supplier || '',
     });
     setShowModal(true);
+  };
+
+  const renderModalTitle = () => {
+    if (editingId) return React.createElement('span', null, React.createElement(Edit, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Editar gasto');
+    return React.createElement('span', null, React.createElement(Plus, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Nuevo gasto');
   };
 
   const handleUpdateExpense = async () => {
@@ -115,14 +123,12 @@ export const Expenses = () => {
     setForm(emptyForm());
   };
 
-  // Eliminar gasto
   const handleDeleteExpense = async (id: number) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
       await deleteExpense(id);
     }
   };
 
-  // Formatear fecha
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-ES', {
@@ -134,7 +140,7 @@ export const Expenses = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>💸 Gastos y Egresos</h1>
+      <h1 style={styles.title}><TrendingDown size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Gastos y Egresos</h1>
 
       {/* Resumen */}
       <div style={styles.summary}>
@@ -144,15 +150,15 @@ export const Expenses = () => {
         </div>
         <div style={styles.summaryCard}>
           <div style={styles.summaryValue}>${totalMerchandise.toFixed(2)}</div>
-          <div style={styles.summaryLabel}>👕 Mercadería</div>
+          <div style={styles.summaryLabel}>Mercadería</div>
         </div>
         <div style={styles.summaryCard}>
           <div style={styles.summaryValue}>${totalTransport.toFixed(2)}</div>
-          <div style={styles.summaryLabel}>🚌 Viajes y alimentación</div>
+          <div style={styles.summaryLabel}>Viajes y alimentación</div>
         </div>
         <div style={styles.summaryCard}>
           <div style={styles.summaryValue}>${totalStore.toFixed(2)}</div>
-          <div style={styles.summaryLabel}>🏪 Tienda (arriendo, servicios)</div>
+          <div style={styles.summaryLabel}>Tienda (arriendo, servicios)</div>
         </div>
       </div>
 
@@ -161,7 +167,7 @@ export const Expenses = () => {
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="🔍 Buscar por descripción o proveedor..."
+            placeholder="Buscar por descripción o proveedor..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
@@ -174,13 +180,13 @@ export const Expenses = () => {
             onChange={(e) => setFilterCategory(e.target.value)}
             style={styles.filterSelect}
           >
-            <option value="all">📂 Todas las categorías</option>
-            <option value="transport">🚌 Transporte</option>
-            <option value="lodging">🏨 Hospedaje</option>
-            <option value="food">🍽️ Alimentación</option>
-            <option value="merchandise">👕 Mercadería</option>
-            <option value="store">🏪 Tienda</option>
-            <option value="other">📦 Otros</option>
+            <option value="all">Todas las categorías</option>
+            <option value="transport">Transporte</option>
+            <option value="lodging">Hospedaje</option>
+            <option value="food">Alimentación</option>
+            <option value="merchandise">Mercadería</option>
+            <option value="store">Tienda</option>
+            <option value="other">Otros</option>
           </select>
           
           <select
@@ -188,7 +194,7 @@ export const Expenses = () => {
             onChange={(e) => setFilterCity(e.target.value)}
             style={styles.filterSelect}
           >
-            <option value="all">📍 Todas las ciudades</option>
+            <option value="all">Todas las ciudades</option>
             {cities.filter(c => c !== 'all').map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -203,11 +209,10 @@ export const Expenses = () => {
           }}
           style={styles.addButton}
         >
-          ➕ Nuevo gasto
+          <Plus size={18} style={{ marginRight: 6 }} /> Nuevo gasto
         </button>
       </div>
 
-      {/* Tabla de gastos */}
       <div style={styles.tableContainer}>
         {filteredExpenses.length === 0 ? (
           <div style={styles.emptyState}>
@@ -239,7 +244,7 @@ export const Expenses = () => {
                 <div style={styles.tableCell}>{formatDate(expense.date)}</div>
                 <div style={styles.tableCell}>
                   <span style={styles.categoryBadge}>
-                    {categoryLabels[expense.category]?.label || expense.category}
+                    {categoryLabels[expense.category as keyof typeof categoryLabels]?.label || expense.category}
                   </span>
                 </div>
                 <div style={styles.tableCell}>
@@ -248,12 +253,12 @@ export const Expenses = () => {
                 </div>
                 <div style={styles.tableCell}>
                   <span style={styles.cityBadge}>
-                    📍 {expense.city || '-'}
+                    <MapPin size={14} style={{ marginRight: 2, verticalAlign: 'middle' }} /> {expense.city || '-'}
                   </span>
                 </div>
                 <div style={styles.tableCell}>
                   <span style={styles.supplierText}>
-                    {expense.supplier || '-'}
+                    {expense.supplier || expense.supplier_id?.toString() || '-'}
                   </span>
                 </div>
                 <div style={styles.tableCell}>
@@ -269,13 +274,13 @@ export const Expenses = () => {
                     onClick={() => handleEditExpense(expense)}
                     style={styles.editButton}
                   >
-                    ✏️
+                    <Edit size={14} />
                   </button>
                   <button
                     onClick={() => handleDeleteExpense(expense.id)}
                     style={styles.deleteButton}
                   >
-                    🗑️
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
@@ -284,12 +289,11 @@ export const Expenses = () => {
         )}
       </div>
 
-      {/* Modal para crear/editar gasto */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             <h2 style={styles.modalTitle}>
-              {editingId ? '✏️ Editar gasto' : '🆕 Nuevo gasto'}
+              {renderModalTitle()}
             </h2>
             
             <div style={styles.modalForm}>
@@ -310,12 +314,12 @@ export const Expenses = () => {
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                     style={styles.formSelect}
                   >
-                    <option value="transport">🚌 Transporte</option>
-                    <option value="lodging">🏨 Hospedaje</option>
-                    <option value="food">🍽️ Alimentación</option>
-                    <option value="merchandise">👕 Mercadería</option>
-                    <option value="store">🏪 Tienda</option>
-                    <option value="other">📦 Otros</option>
+                    <option value="transport">Transporte</option>
+                    <option value="lodging">Hospedaje</option>
+                    <option value="food">Alimentación</option>
+                    <option value="merchandise">Mercadería</option>
+                    <option value="store">Tienda</option>
+                    <option value="other">Otros</option>
                   </select>
                 </div>
               </div>
@@ -376,9 +380,9 @@ export const Expenses = () => {
                     onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
                     style={styles.formSelect}
                   >
-                    <option value="cash">💵 Efectivo</option>
-                    <option value="card">💳 Tarjeta</option>
-                    <option value="transfer">🏦 Transferencia</option>
+                    <option value="cash">Efectivo</option>
+                    <option value="card">Tarjeta</option>
+                    <option value="transfer">Transferencia</option>
                   </select>
                 </div>
                 <div style={styles.formGroup}>
@@ -419,7 +423,6 @@ export const Expenses = () => {
   );
 };
 
-// Estilos
 const baseStyles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '24px',

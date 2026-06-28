@@ -1,26 +1,39 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { InactivityModal } from './components/InactivityModal';
+import { SidebarProvider, useSidebar } from './context/SidebarContext';
+import { Ban } from 'lucide-react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { Login } from './pages/Login';
 
-// Importar todas las páginas
-import { Sales } from './pages/Sales';
-import { Balance } from './pages/Balance';
-import { Statistics } from './pages/Statistics';
-import { Inventory } from './pages/Inventory';
-import { Expenses } from './pages/Expenses';
-import { Employees } from './pages/Employees';
-import { Clients } from './pages/Clients';
-import { Suppliers } from './pages/Suppliers';
-import { Settings } from './pages/Settings';
-import { CerrarCaja } from './pages/CerrarCaja';
-import { Recibos } from './pages/Recibos';
+// Carga diferida (lazy) para reducir tamaño del bundle inicial
+const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const Sales = lazy(() => import('./pages/Sales').then(m => ({ default: m.Sales })));
+const Balance = lazy(() => import('./pages/Balance').then(m => ({ default: m.Balance })));
+const Statistics = lazy(() => import('./pages/Statistics').then(m => ({ default: m.Statistics })));
+const Inventory = lazy(() => import('./pages/Inventory').then(m => ({ default: m.Inventory })));
+const Expenses = lazy(() => import('./pages/Expenses').then(m => ({ default: m.Expenses })));
+const Employees = lazy(() => import('./pages/Employees').then(m => ({ default: m.Employees })));
+const Clients = lazy(() => import('./pages/Clients').then(m => ({ default: m.Clients })));
+const Suppliers = lazy(() => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })));
+const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const CerrarCaja = lazy(() => import('./pages/CerrarCaja').then(m => ({ default: m.CerrarCaja })));
+const Recibos = lazy(() => import('./pages/Recibos').then(m => ({ default: m.Recibos })));
+const Ayuda = lazy(() => import('./pages/Ayuda').then(m => ({ default: m.Ayuda })));
+const Categories = lazy(() => import('./pages/Categories').then(m => ({ default: m.Categories })));
 
+const PageLoader = () => {
+  const { colors } = useTheme();
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px)', color: colors.textSecondary, fontSize: 14, backgroundColor: colors.bgPrimary }}>
+      Cargando...
+    </div>
+  );
+};
 
-// Componente que protege las rutas
 const ProtectedRoute = ({ children, module }: { children: React.ReactNode; module?: string }) => {
   const { isAuthenticated, isLoading, hasPermission } = useAuth();
   const { colors } = useTheme();
@@ -47,7 +60,7 @@ const ProtectedRoute = ({ children, module }: { children: React.ReactNode; modul
         ...styles.unauthorizedContainer,
         backgroundColor: colors.bgPrimary,
       }}>
-        <div style={styles.unauthorizedIcon}>🚫</div>
+        <Ban size={48} style={{ marginBottom: 16, color: '#ef4444' }} />
         <h2 style={{
           ...styles.unauthorizedTitle,
           color: colors.textHeading,
@@ -67,10 +80,10 @@ const ProtectedRoute = ({ children, module }: { children: React.ReactNode; modul
   return <>{children}</>;
 };
 
-// Layout principal con sidebar
 const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const { sidebarWidth } = useSidebar();
   return (
     <div style={{
       ...styles.app,
@@ -79,20 +92,25 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
       <Sidebar />
       <div style={{
         ...styles.main,
+        marginLeft: sidebarWidth + 'px',
         backgroundColor: colors.bgPrimary,
       }}>
         <TopBar user={user} />
-        <div style={styles.content}>
+        <div style={{
+          ...styles.content,
+          backgroundColor: colors.bgPrimary,
+        }}>
           {children}
         </div>
       </div>
+      <InactivityModal />
     </div>
   );
 };
 
 // Componente App interno (con autenticación)
 const AppContent = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, inactivityWarning, resetInactivityTimer } = useAuth();
   const { colors } = useTheme();
 
   if (isLoading) {
@@ -109,23 +127,28 @@ const AppContent = () => {
 
   return (
     <Routes>
-      {/* Login - si ya está autenticado, redirige a /vender */}
       <Route 
         path="/login" 
-        element={isAuthenticated ? <Navigate to="/vender" replace /> : <Login />} 
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
       />
       
-      {/* Ruta raíz - redirige a /vender si está autenticado, o a /login si no */}
       <Route 
         path="/" 
-        element={<Navigate to={isAuthenticated ? "/vender" : "/login"} replace />} 
+        element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} 
       />
       
-      {/* Rutas protegidas */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute module="dashboard">
+          <MainLayout>
+            <Suspense fallback={<PageLoader />}><Dashboard /></Suspense>
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+
       <Route path="/vender" element={
         <ProtectedRoute module="vender">
           <MainLayout>
-            <Sales />
+            <Suspense fallback={<PageLoader />}><Sales /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -133,7 +156,7 @@ const AppContent = () => {
       <Route path="/cerrar-caja" element={
         <ProtectedRoute module="cerrar-caja">
           <MainLayout>
-            <CerrarCaja />
+            <Suspense fallback={<PageLoader />}><CerrarCaja /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -141,7 +164,7 @@ const AppContent = () => {
       <Route path="/balance" element={
         <ProtectedRoute module="balance">
           <MainLayout>
-            <Balance />
+            <Suspense fallback={<PageLoader />}><Balance /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -149,7 +172,7 @@ const AppContent = () => {
       <Route path="/estadisticas" element={
         <ProtectedRoute module="estadisticas">
           <MainLayout>
-            <Statistics />
+            <Suspense fallback={<PageLoader />}><Statistics /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -157,7 +180,7 @@ const AppContent = () => {
       <Route path="/inventario" element={
         <ProtectedRoute module="inventario">
           <MainLayout>
-            <Inventory />
+            <Suspense fallback={<PageLoader />}><Inventory /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -165,7 +188,7 @@ const AppContent = () => {
       <Route path="/gastos" element={
         <ProtectedRoute module="gastos">
           <MainLayout>
-            <Expenses />
+            <Suspense fallback={<PageLoader />}><Expenses /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -173,7 +196,7 @@ const AppContent = () => {
       <Route path="/empleados" element={
         <ProtectedRoute module="empleados">
           <MainLayout>
-            <Employees />
+            <Suspense fallback={<PageLoader />}><Employees /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -181,7 +204,7 @@ const AppContent = () => {
       <Route path="/clientes" element={
         <ProtectedRoute module="clientes">
           <MainLayout>
-            <Clients />
+            <Suspense fallback={<PageLoader />}><Clients /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -189,7 +212,7 @@ const AppContent = () => {
       <Route path="/proveedores" element={
         <ProtectedRoute module="proveedores">
           <MainLayout>
-            <Suppliers />
+            <Suspense fallback={<PageLoader />}><Suppliers /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -197,7 +220,7 @@ const AppContent = () => {
       <Route path="/configuraciones" element={
         <ProtectedRoute module="configuraciones">
           <MainLayout>
-            <Settings />
+            <Suspense fallback={<PageLoader />}><Settings /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
@@ -205,20 +228,27 @@ const AppContent = () => {
       <Route path="/recibos" element={
         <ProtectedRoute module="recibos">
           <MainLayout>
-            <Recibos />
+            <Suspense fallback={<PageLoader />}><Recibos /></Suspense>
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/ayuda" element={
+        <ProtectedRoute module="ayuda">
+          <MainLayout>
+            <Suspense fallback={<PageLoader />}><Ayuda /></Suspense>
+          </MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/categorias" element={
+        <ProtectedRoute module="categorias">
+          <MainLayout>
+            <Suspense fallback={<PageLoader />}><Categories /></Suspense>
           </MainLayout>
         </ProtectedRoute>
       } />
             
-      {/* Rutas para páginas extra */}
-      <Route path="/ayuda" element={
-        <ProtectedRoute>
-          <MainLayout>
-            <div style={styles.placeholder}>❓ Ayuda</div>
-          </MainLayout>
-        </ProtectedRoute>
-      } />
-      
       {/* Redireccionar cualquier otra ruta */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -230,9 +260,11 @@ function App() {
   return (
     <HashRouter>
       <ThemeProvider>
+        <SidebarProvider>
         <AuthProvider>
           <AppContent />
         </AuthProvider>
+        </SidebarProvider>
       </ThemeProvider>
     </HashRouter>
   );
@@ -258,6 +290,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: '64px',
     overflowY: 'auto' as 'auto',
     padding: '20px',
+    backgroundColor: '#f5f7fa',
   },
   loadingContainer: {
     display: 'flex',

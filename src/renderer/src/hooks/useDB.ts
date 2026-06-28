@@ -24,6 +24,7 @@ export interface Client {
   document: string;
   total_debt: number;
   total_purchases: number;
+  created_at: string;
 }
 
 export interface Employee {
@@ -61,6 +62,7 @@ export interface Expense {
   amount: number;
   payment_method: string;
   supplier_id?: number;
+  supplier?: string;
   city?: string;
   notes?: string;
 }
@@ -79,6 +81,29 @@ export interface Sale {
   client_name?: string;
   employee_name?: string;
   items?: SaleItem[];
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface DashboardSummary {
+  ventasHoy: number;
+  cantidadVentasHoy: number;
+  ventasSemana: Array<{ date: string; total: number }>;
+  gastosHoy: number;
+  totalProductos: number;
+  totalClientes: number;
+  totalProveedores: number;
+  totalEmpleados: number;
+  deudaClientes: number;
+  stockBajo: number;
+  sinStock: number;
+  ventasRecientes: Array<{ id: number; date: string; total: number; payment_method: string; client_name: string | null }>;
+  productosStockBajo: Array<{ id: number; name: string; stock: number; min_stock: number }>;
+  hayVentasHoy: boolean;
 }
 
 export interface SaleItem {
@@ -126,7 +151,7 @@ function useEntity<T>(
 // HOOK: useProducts
 // ============================================
 export const useProducts = () => {
-  const { data: products, loading, error, load: loadProducts, setData } = useEntity<Product>(
+  const { data: products, loading, error, load: loadProducts } = useEntity<Product>(
     () => window.dajhoAPI.products.getAll()
   );
 
@@ -400,4 +425,116 @@ export const useSales = () => {
   }, []);
 
   return { sales, loading, error, loadSales, createSale, getSaleById, getSalesByDate, getSalesByDateRange };
+};
+
+// ============================================
+// HOOK: useCategories (con timeout para evitar colgamientos)
+// ============================================
+const CATEGORIES_TIMEOUT = 8000;
+
+async function invokeWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Tiempo de espera agotado (${ms}ms)`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
+export const useCategories = () => {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await invokeWithTimeout(
+        window.dajhoAPI.categories.getAll(),
+        CATEGORIES_TIMEOUT
+      );
+      // Verificar que la respuesta sea un arreglo (no un { success: false })
+      if (Array.isArray(result)) {
+        setCategories(result);
+      } else if (result && typeof result === 'object' && 'error' in result) {
+        setError((result as any).error || 'Error al cargar categorías');
+      } else {
+        setCategories([]);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al cargar categorías');
+      console.error('Error al cargar categorías:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  const createCategory = useCallback(async (data: { name: string }) => {
+    try {
+      const id = await window.dajhoAPI.categories.create(data);
+      await loadCategories();
+      return id;
+    } catch (err) {
+      console.error('Error al crear categoría:', err);
+      return null;
+    }
+  }, [loadCategories]);
+
+  const updateCategory = useCallback(async (id: number, data: { name: string }) => {
+    try {
+      await window.dajhoAPI.categories.update(id, data);
+      await loadCategories();
+      return true;
+    } catch (err) {
+      console.error('Error al actualizar categoría:', err);
+      return false;
+    }
+  }, [loadCategories]);
+
+  const deleteCategory = useCallback(async (id: number) => {
+    try {
+      await window.dajhoAPI.categories.delete(id);
+      await loadCategories();
+      return true;
+    } catch (err) {
+      console.error('Error al eliminar categoría:', err);
+      return false;
+    }
+  }, [loadCategories]);
+
+  return { categories, loading, error, loadCategories, createCategory, updateCategory, deleteCategory };
+};
+
+// ============================================
+// HOOK: useDashboard
+// ============================================
+export const useDashboard = () => {
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSummary = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await window.dajhoAPI.dashboard.getSummary();
+      setSummary(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+
+  return { summary, loading, error, loadSummary };
 };

@@ -1,0 +1,11 @@
+﻿Para generar los íconos de la aplicación, necesitas crear estos archivos en esta carpeta:
+- icon.ico  (256x256, para Windows)
+- icon.icns (para macOS)
+- icon.png  (512x512, para Linux)
+
+Puedes usar herramientas como:
+- https://icoconverter.com/
+- https://cloudconvert.com/png-to-ico
+- https://iconverticons.com/online/
+
+O diseñar un logo en Canva/Illustrator y exportar en los formatos necesarios.

@@ -1,13 +1,13 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useEmployees } from '../hooks/useDB';
 import { useAuth } from '../context/AuthContext';
+import { PasswordConfirm } from '../components/PasswordConfirm';
+import { Users, Edit, Trash2, Plus, Search, Lightbulb } from 'lucide-react';
 
 interface EmployeeForm {
   name: string;
   phone: string;
-  email: string;
-  role: string;
   salary: number;
   notes: string;
   username: string;
@@ -15,7 +15,7 @@ interface EmployeeForm {
 }
 
 const emptyForm = (): EmployeeForm => ({
-  name: '', phone: '', email: '', role: 'employee', salary: 0, notes: '', username: '', password: '',
+  name: '', phone: '', salary: 0, notes: '', username: '', password: '',
 });
 
 export const Employees = () => {
@@ -56,6 +56,7 @@ export const Employees = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
       const [form, setForm] = useState<EmployeeForm>(emptyForm());
   const [formStatus, setFormStatus] = useState<string>('active');
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
   const resetForm = () => {
     setForm(emptyForm());
@@ -63,7 +64,6 @@ export const Employees = () => {
     setEditingId(null);
   };
 
-  // Calcular estadísticas
   const totalEmployees = employees.length;
   const activeEmployees = employees.filter(e => e.status === 'active').length;
   const totalSales = employees.reduce((sum, e) => sum + (e.sales_count || 0), 0);
@@ -71,14 +71,13 @@ export const Employees = () => {
   // Filtrar empleados
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          employee.phone.includes(searchTerm) ||
-                          employee.email.toLowerCase().includes(searchTerm.toLowerCase());
+                          employee.phone.includes(searchTerm);
     const matchesRole = filterRole === 'all' || employee.role === filterRole;
     const matchesStatus = filterStatus === 'all' || employee.status === filterStatus;
     return matchesSearch && matchesRole && matchesStatus;
   });
 
-    // Agregar empleado
+    // Agregar empleado (requiere contraseña del propietario)
   const handleAddEmployee = async () => {
     if (!form.name || !form.phone) {
       alert('Por favor completa al menos el nombre y teléfono');
@@ -88,65 +87,98 @@ export const Employees = () => {
       alert('Debes asignar un usuario y contraseña para el nuevo empleado');
       return;
     }
-    const empId = await createEmployee({
-      ...form,
-      status: formStatus,
-      hire_date: new Date().toISOString().split('T')[0],
-    });
-    if (empId) {
-      const result = await window.dajhoAPI.users.create({
-        name: form.name,
-        username: form.username.toLowerCase().trim(),
-        email: form.email || `${form.username.toLowerCase().trim()}@dajho.com`,
-        password: form.password,
-        role: form.role === 'owner' ? 'owner' : 'employee',
+    setPendingAction(() => async () => {
+      const empId = await createEmployee({
+        ...form,
+        role: 'employee',
+        status: formStatus,
+        hire_date: new Date().toISOString().split('T')[0],
       });
-      if (!result.success) {
-        alert(`⚠️ Empleado creado pero hubo un error al crear el usuario: ${result.error}`);
-      } else {
-        alert('✅ Empleado y usuario creados correctamente');
+      if (empId) {
+        const result = await window.dajhoAPI.users.create({
+          name: form.name,
+          username: form.username.toLowerCase().trim(),
+          email: `${form.username.toLowerCase().trim()}@dajho.com`,
+          password: form.password,
+          role: 'employee',
+        });
+        if (!result.success) {
+          alert(`⚠️ Empleado creado pero hubo un error al crear el usuario: ${result.error}`);
+        } else {
+          alert('✅ Empleado y usuario creados correctamente');
+        }
       }
-    }
-    setShowModal(false);
-    resetForm();
+      setShowModal(false);
+      resetForm();
+    });
   };
 
-    // Editar empleado
-  const handleEditEmployee = (employee: any) => {
+    // Editar empleado (requiere contraseña del propietario)
+  const handleEditEmployee = async (employee: any) => {
     setEditingId(employee.id);
+    let userData: any = null;
+    try {
+      const usernameGuess = employee.name?.toLowerCase().replace(/\s+/g, '').normalize('NFD').replace(/[^\w]/g, '');
+      userData = await window.dajhoAPI.users.findByUsername(usernameGuess || '');
+      if (!userData) {
+        const firstName = employee.name?.split(' ')[0]?.toLowerCase().normalize('NFD').replace(/[^\w]/g, '');
+        if (firstName) userData = await window.dajhoAPI.users.findByUsername(firstName);
+      }
+    } catch { /* ignorar */ }
+
     setForm({
       name: employee.name || '',
       phone: employee.phone || '',
-      email: employee.email || '',
-      role: employee.role || 'employee',
       salary: employee.salary || 0,
       notes: employee.notes || '',
-      username: '',
+      username: userData?.username || '',
       password: '',
     });
     setFormStatus(employee.status || 'active');
     setShowModal(true);
   };
 
-    const handleUpdateEmployee = async () => {
+  const renderModalTitle = () => {
+    if (editingId) return React.createElement('span', null, React.createElement(Edit, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Editar empleado');
+    return React.createElement('span', null, React.createElement(Plus, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Nuevo empleado');
+  };
+
+  const handleUpdateEmployee = async () => {
     if (!editingId) return;
     if (!form.name || !form.phone) {
       alert('Por favor completa al menos el nombre y teléfono');
       return;
     }
-    await updateEmployee(editingId, { ...form, status: formStatus });
-    setShowModal(false);
-    resetForm();
+    setPendingAction(() => async () => {
+      await updateEmployee(editingId, { ...form, status: formStatus });
+
+      try {
+        if (form.username) {
+          let userToUpdate = await window.dajhoAPI.users.findByUsername(form.username);
+          if (userToUpdate?.id) {
+            const updateData: any = { name: form.name, role: 'employee' };
+            if (form.username) updateData.username = form.username.toLowerCase().trim();
+            if (form.password) updateData.password = form.password;
+            await window.dajhoAPI.users.update(userToUpdate.id, updateData);
+          }
+        }
+      } catch (err) {
+        console.error('Error al actualizar usuario:', err);
+      }
+
+      setShowModal(false);
+      resetForm();
+    });
   };
 
-  // Eliminar empleado
   const handleDeleteEmployee = async (id: number) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este empleado?')) {
-      await deleteEmployee(id);
+      setPendingAction(() => async () => {
+        await deleteEmployee(id);
+      });
     }
   };
 
-  // Cambiar estado
   const toggleStatus = async (id: number) => {
     const emp = employees.find(e => e.id === id);
     if (emp) {
@@ -154,7 +186,6 @@ export const Employees = () => {
     }
   };
 
-  // Formatear fecha
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-ES', {
@@ -184,9 +215,8 @@ export const Employees = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>👥 Empleados</h1>
+      <h1 style={styles.title}><Users size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Empleados</h1>
 
-      {/* Estadísticas */}
       <div style={styles.stats}>
         <div style={styles.statCard}>
           <div style={styles.statValue}>{totalEmployees}</div>
@@ -202,12 +232,11 @@ export const Employees = () => {
         </div>
       </div>
 
-      {/* Acciones */}
       <div style={styles.actions}>
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="🔍 Buscar por nombre, teléfono o email..."
+            placeholder="Buscar por nombre o teléfono..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
@@ -247,7 +276,6 @@ export const Employees = () => {
         </button>
       </div>
 
-      {/* Tabla de empleados */}
       <div style={styles.tableContainer}>
         {filteredEmployees.length === 0 ? (
           <div style={styles.emptyState}>
@@ -278,7 +306,6 @@ export const Employees = () => {
               <div key={employee.id} style={styles.tableRow}>
                 <div style={styles.tableCell}>
                   <div style={styles.employeeName}>{employee.name}</div>
-                  <div style={styles.employeeEmail}>{employee.email}</div>
                 </div>
                 <div style={styles.tableCell}>{employee.phone}</div>
                 <div style={styles.tableCell}>
@@ -313,13 +340,13 @@ export const Employees = () => {
                     onClick={() => handleEditEmployee(employee)}
                     style={styles.editButton}
                   >
-                    ✏️
+                    <Edit size={14} />
                   </button>
                   <button
                     onClick={() => handleDeleteEmployee(employee.id)}
                     style={styles.deleteButton}
                   >
-                    🗑️
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
@@ -328,12 +355,11 @@ export const Employees = () => {
         )}
       </div>
 
-      {/* Modal para crear/editar empleado */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             <h2 style={styles.modalTitle}>
-              {editingId ? '✏️ Editar empleado' : '🆕 Nuevo empleado'}
+              {renderModalTitle()}
             </h2>
             
             <div style={styles.modalForm}>
@@ -361,16 +387,6 @@ export const Employees = () => {
               </div>
 
               <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Email</label>
-                  <input
-                    type="email"
-                    placeholder="empleado@email.com"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    style={styles.formInput}
-                  />
-                </div>
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>Salario ($)</label>
                   <input
@@ -418,24 +434,13 @@ export const Employees = () => {
                   </div>
                   {editingId && (
                     <p style={{ fontSize: '12px', color: '#6b7a8a', margin: '-8px 0 0 0' }}>
-                      💡 Solo completa estos campos si quieres cambiar el usuario o la contraseña
+                      <Lightbulb size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Solo completa estos campos si quieres cambiar el usuario o la contraseña
                     </p>
                   )}
                 </>
               )}
 
               <div style={styles.formRow}>
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Rol</label>
-                  <select
-                    value={form.role}
-                    onChange={(e) => setForm({ ...form, role: e.target.value })}
-                    style={styles.formSelect}
-                  >
-                    <option value="owner">Propietario</option>
-                    <option value="employee">Empleado</option>
-                  </select>
-                </div>
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>Estado</label>
                   <select
@@ -479,6 +484,15 @@ export const Employees = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {pendingAction && (
+        <PasswordConfirm
+          title="Confirmar operación"
+          message="Ingresa la contraseña del propietario para realizar esta operación"
+          onConfirm={pendingAction}
+          onCancel={() => setPendingAction(null)}
+        />
       )}
     </div>
   );

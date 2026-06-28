@@ -1,10 +1,28 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useSales, useExpenses } from '../hooks/useDB';
+import { Plus, ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, TrendingDown, Clock, CreditCard } from 'lucide-react';
+
+// Traducción de categorías de gastos (inglés → español)
+const CATEGORY_LABELS: Record<string, string> = {
+  transport: 'Transporte',
+  lodging: 'Hospedaje',
+  food: 'Alimentación',
+  merchandise: 'Mercadería',
+  store: 'Tienda',
+  other: 'Otros',
+  Ventas: 'Ventas',
+  Gastos: 'Gastos',
+};
+
+function translateCategory(cat: string): string {
+  return CATEGORY_LABELS[cat] || cat.charAt(0).toUpperCase() + cat.slice(1);
+}
 
 interface Transaction {
   id: number;
   date: string;
+  time: string;
   concept: string;
   type: 'income' | 'expense';
   amount: number;
@@ -44,13 +62,13 @@ export const Balance = () => {
   const { sales } = useSales();
   const { expenses, createExpense } = useExpenses();
 
-  // Combinar ventas (ingresos) + gastos (egresos)
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   useEffect(() => {
     const income: Transaction[] = sales.map((s: any) => ({
       id: s.id,
       date: s.date,
-      concept: `Venta #${s.id} - ${s.items?.length || 0} productos`,
+      time: s.time || '',
+      concept: `Venta #${s.id} - ${s.items_count || 0} productos`,
       type: 'income' as const,
       amount: s.total || 0,
       category: 'Ventas',
@@ -58,12 +76,20 @@ export const Balance = () => {
     const outcome: Transaction[] = expenses.map((e: any) => ({
       id: e.id + 10000,
       date: e.date,
+      time: '',
       concept: e.description,
       type: 'expense' as const,
       amount: e.amount || 0,
       category: e.category || 'Gastos',
     }));
-    const combined = [...income, ...outcome].sort((a, b) => b.date.localeCompare(a.date));
+    // Ordenar por fecha descendente, luego por hora descendente, luego por ID descendente
+    const combined = [...income, ...outcome].sort((a, b) => {
+      const dateCmp = b.date.localeCompare(a.date);
+      if (dateCmp !== 0) return dateCmp;
+      const timeCmp = b.time.localeCompare(a.time);
+      if (timeCmp !== 0) return timeCmp;
+      return b.id - a.id;
+    });
     setTransactions(combined);
   }, [sales, expenses]);
   const [filter, setFilter] = useState('today');
@@ -107,7 +133,6 @@ export const Balance = () => {
 
   const filteredTransactions = getFilteredTransactions();
 
-  // Calcular balances
   const totalIncome = transactions
     .filter(t => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -119,7 +144,6 @@ export const Balance = () => {
   const totalPending = 0; // Por implementar (por cobrar)
   const totalPayable = 0; // Por implementar (por pagar)
 
-  // Agregar nueva transacción
   const handleAddTransaction = async () => {
     if (!newTransaction.concept || !newTransaction.amount || newTransaction.amount <= 0) {
       alert('Por favor completa todos los campos');
@@ -142,19 +166,22 @@ export const Balance = () => {
     setNewTransaction({ type: 'income', category: 'Ventas', amount: 0 });
   };
 
-  // Formatear fecha
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string, timeStr?: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('es-ES', {
+    const dateFormatted = date.toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',
-      year: 'numeric'
+      year: 'numeric',
     });
+    if (timeStr) {
+      return `${dateFormatted} ${timeStr}`;
+    }
+    return dateFormatted;
   };
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>💰 Balance</h1>
+      <h1 style={styles.title}><Wallet size={28} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Balance</h1>
 
       {/* Filtros */}
       <div style={styles.filters}>
@@ -166,7 +193,7 @@ export const Balance = () => {
               ...(filter === 'today' ? styles.filterButtonActive : {})
             }}
           >
-            📅 Hoy
+            Hoy
           </button>
           <button
             onClick={() => setFilter('week')}
@@ -175,7 +202,7 @@ export const Balance = () => {
               ...(filter === 'week' ? styles.filterButtonActive : {})
             }}
           >
-            📆 Semana
+            Semana
           </button>
           <button
             onClick={() => setFilter('month')}
@@ -184,7 +211,7 @@ export const Balance = () => {
               ...(filter === 'month' ? styles.filterButtonActive : {})
             }}
           >
-            📊 Mes
+            Mes
           </button>
           <button
             onClick={() => setFilter('all')}
@@ -193,14 +220,14 @@ export const Balance = () => {
               ...(filter === 'all' ? styles.filterButtonActive : {})
             }}
           >
-            🔄 Todos
+            Todos
           </button>
         </div>
         
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="🔍 Buscar concepto..."
+            placeholder="Buscar concepto..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
@@ -211,7 +238,7 @@ export const Balance = () => {
       {/* Resumen de balances */}
       <div style={styles.summary}>
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>📈</div>
+          <TrendingUp size={24} color="#2ecc71" />
           <div>
             <div style={styles.summaryLabel}>Ingresos</div>
             <div style={{ ...styles.summaryValue, color: '#2ecc71' }}>
@@ -221,7 +248,7 @@ export const Balance = () => {
         </div>
         
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>📉</div>
+          <TrendingDown size={24} color="#e74c3c" />
           <div>
             <div style={styles.summaryLabel}>Egresos</div>
             <div style={{ ...styles.summaryValue, color: '#e74c3c' }}>
@@ -231,7 +258,7 @@ export const Balance = () => {
         </div>
         
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>⏳</div>
+          <Clock size={24} color="#f39c12" />
           <div>
             <div style={styles.summaryLabel}>Por cobrar</div>
             <div style={{ ...styles.summaryValue, color: '#f39c12' }}>
@@ -241,7 +268,7 @@ export const Balance = () => {
         </div>
         
         <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>💳</div>
+          <CreditCard size={24} color="#e67e22" />
           <div>
             <div style={styles.summaryLabel}>Por pagar</div>
             <div style={{ ...styles.summaryValue, color: '#e67e22' }}>
@@ -251,7 +278,6 @@ export const Balance = () => {
         </div>
       </div>
 
-      {/* Tabla de transacciones */}
       <div style={styles.tableContainer}>
         <div style={styles.tableHeader}>
           <h2 style={styles.tableTitle}>Transacciones</h2>
@@ -259,7 +285,7 @@ export const Balance = () => {
             onClick={() => setShowModal(true)}
             style={styles.addButton}
           >
-            ➕ Crear movimiento
+            <Plus size={16} style={{ marginRight: 6 }} /> Crear movimiento
           </button>
         </div>
 
@@ -284,17 +310,21 @@ export const Balance = () => {
             </div>
             {filteredTransactions.map((transaction) => (
               <div key={transaction.id} style={styles.tableRow}>
-                <div style={styles.tableCell}>{formatDate(transaction.date)}</div>
+                <div style={styles.tableCell}>{formatDate(transaction.date, transaction.time)}</div>
                 <div style={styles.tableCell}>{transaction.concept}</div>
                 <div style={styles.tableCell}>
-                  <span style={styles.categoryBadge}>{transaction.category}</span>
+                  <span style={styles.categoryBadge}>{translateCategory(transaction.category)}</span>
                 </div>
                 <div style={styles.tableCell}>
                   <span style={{
                     ...styles.typeBadge,
                     ...(transaction.type === 'income' ? styles.typeIncome : styles.typeExpense)
                   }}>
-                    {transaction.type === 'income' ? 'Ingreso' : 'Egreso'}
+                    {transaction.type === 'income' ? (
+                      <span><ArrowUpRight size={14} style={{ marginRight: 2 }} /> Ingreso </span>
+                    ) : (
+                      <span><ArrowDownRight size={14} style={{ marginRight: 2 }} /> Egreso </span>
+                    )}
                   </span>
                 </div>
                 <div style={{
@@ -311,7 +341,6 @@ export const Balance = () => {
         )}
       </div>
 
-      {/* Modal para crear movimiento */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -403,7 +432,6 @@ export const Balance = () => {
   );
 };
 
-// Estilos
 const baseStyles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '24px',

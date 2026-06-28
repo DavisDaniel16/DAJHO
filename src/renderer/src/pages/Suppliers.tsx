@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { applyThemeToStyles } from '../styles/theme';
 import { useSuppliers } from '../hooks/useDB';
+import { Building2, Edit, Trash2, Plus, Search, MapPin, Luggage, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 
 interface SupplierForm {
   name: string;
@@ -27,13 +28,8 @@ const emptyForm = (): SupplierForm => ({
   name: '', phone: '', city: '', address: '', contact_person: '', products_type: '', notes: '',
 });
 
-// Viajes de compra (historial)
-const mockPurchaseTrips: PurchaseTrip[] = [
-  { id: 1, supplierId: 1, date: '2026-06-15', city: 'Quito', products: ['Camisas', 'Blusas'], total: 450.00, paymentStatus: 'paid' },
-  { id: 2, supplierId: 2, date: '2026-06-18', city: 'Guayaquil', products: ['Vestidos', 'Accesorios'], total: 300.00, paymentStatus: 'pending' },
-  { id: 3, supplierId: 3, date: '2026-06-10', city: 'Cuenca', products: ['Pantalones', 'Chaquetas'], total: 680.00, paymentStatus: 'paid' },
-  { id: 4, supplierId: 4, date: '2026-06-12', city: 'Manta', products: ['Vestidos', 'Blusas'], total: 420.00, paymentStatus: 'partial' },
-];
+// NOTA: Los viajes de compra se gestionan en estado local.
+// En una versión futura, migrar a una tabla dedicada en SQLite.
 
 export const Suppliers = () => {
   const { colors } = useTheme();
@@ -76,7 +72,6 @@ export const Suppliers = () => {
   const totalPending = suppliers.reduce((sum, s) => sum + (s.total_pending || 0), 0);
   const totalPurchases = suppliers.reduce((sum, s) => sum + (s.total_purchases || 0), 0);
 
-  // Filtrar proveedores
   const filteredSuppliers = suppliers.filter(supplier => {
     const matchesSearch = supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           supplier.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,7 +80,6 @@ export const Suppliers = () => {
     return matchesSearch && matchesCity;
   });
 
-  // Agregar proveedor
   const handleAddSupplier = async () => {
     if (!form.name || !form.city) {
       alert('Por favor completa al menos el nombre y la ciudad');
@@ -108,6 +102,11 @@ export const Suppliers = () => {
       notes: supplier.notes || '',
     });
     setShowModal(true);
+  };
+
+  const renderModalTitle = () => {
+    if (editingId) return React.createElement('span', null, React.createElement(Edit, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Editar proveedor');
+    return React.createElement('span', null, React.createElement(Plus, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Nuevo proveedor');
   };
 
   const handleUpdateSupplier = async () => {
@@ -157,7 +156,6 @@ export const Suppliers = () => {
     resetTripForm();
   };
 
-  // Resetear formulario de viaje
   const resetTripForm = () => {
     setNewTrip({
       supplierId: 0,
@@ -174,7 +172,6 @@ export const Suppliers = () => {
     return purchaseTrips.filter(t => t.supplierId === supplierId);
   };
 
-  // Formatear fecha
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-ES', {
@@ -186,7 +183,7 @@ export const Suppliers = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>🏢 Proveedores</h1>
+      <h1 style={styles.title}><Building2 size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Proveedores</h1>
 
       {/* Estadísticas */}
       <div style={styles.stats}>
@@ -209,7 +206,7 @@ export const Suppliers = () => {
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="🔍 Buscar por nombre, ciudad o producto..."
+            placeholder="Buscar por nombre, ciudad o producto..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
@@ -224,7 +221,7 @@ export const Suppliers = () => {
           >
             {cities.map(city => (
               <option key={city} value={city}>
-                {city === 'all' ? '📌 Todas las ciudades' : city}
+                {city === 'all' ? 'Todas las ciudades' : city}
               </option>
             ))}
           </select>
@@ -237,12 +234,12 @@ export const Suppliers = () => {
             }}
             style={styles.addButton}
           >
-            ➕ Nuevo proveedor
+            <Plus size={18} style={{ marginRight: 6 }} /> Nuevo proveedor
           </button>
         </div>
       </div>
 
-      {/* Tabla de proveedores */}
+
       <div style={styles.tableContainer}>
         {filteredSuppliers.length === 0 ? (
           <div style={styles.emptyState}>
@@ -278,7 +275,7 @@ export const Suppliers = () => {
                     <div style={styles.supplierName}>{supplier.name}</div>
                   </div>
                   <div style={styles.tableCell}>
-                    <span style={styles.cityBadge}>📍 {supplier.city}</span>
+                    <span style={styles.cityBadge}><MapPin size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> {supplier.city}</span>
                   </div>
                   <div style={styles.tableCell}>
                     <div style={styles.contactInfo}>
@@ -320,7 +317,7 @@ export const Suppliers = () => {
                           supplierId: supplier.id,
                           date: new Date().toISOString().split('T')[0],
                           city: supplier.city,
-                          products: supplier.productsType,
+                          products: (supplier.products_type || '').split(',').filter(Boolean),
                           total: 0,
                           paymentStatus: 'pending',
                         });
@@ -329,21 +326,21 @@ export const Suppliers = () => {
                       style={styles.tripButton}
                       title="Registrar viaje de compra"
                     >
-                      🧳
+                      <Luggage size={16} />
                     </button>
                     <button
                       onClick={() => handleEditSupplier(supplier)}
                       style={styles.editButton}
                       title="Editar"
                     >
-                      ✏️
+                      <Edit size={14} />
                     </button>
                     <button
                       onClick={() => handleDeleteSupplier(supplier.id)}
                       style={styles.deleteButton}
                       title="Eliminar"
                     >
-                      🗑️
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -353,12 +350,11 @@ export const Suppliers = () => {
         )}
       </div>
 
-      {/* Modal para proveedor */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             <h2 style={styles.modalTitle}>
-              {editingSupplier ? '✏️ Editar proveedor' : '🆕 Nuevo proveedor'}
+              {renderModalTitle()}
             </h2>
             
             <div style={styles.modalForm}>
@@ -467,7 +463,7 @@ export const Suppliers = () => {
       {showTripModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
-            <h2 style={styles.modalTitle}>🧳 Registrar viaje de compra</h2>
+            <h2 style={styles.modalTitle}><Luggage size={20} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Registrar viaje de compra</h2>
             <p style={styles.modalSubtitle}>Registra la compra que realizaste en tu viaje</p>
             
             <div style={styles.modalForm}>
@@ -509,9 +505,9 @@ export const Suppliers = () => {
                     onChange={(e) => setNewTrip({ ...newTrip, paymentStatus: e.target.value as 'paid' | 'pending' | 'partial' })}
                     style={styles.formSelect}
                   >
-                    <option value="paid">Pagado ✅</option>
-                    <option value="pending">Pendiente ⏳</option>
-                    <option value="partial">Parcial 🔄</option>
+                    <option value="paid">Pagado</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="partial">Parcial</option>
                   </select>
                 </div>
               </div>

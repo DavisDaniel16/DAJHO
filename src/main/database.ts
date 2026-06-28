@@ -1,63 +1,40 @@
-console.log('========================================');
-console.log('📁 INICIANDO database.ts');
-console.log('========================================');
-
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
-console.log('📁 Paso 1: Importaciones completadas');
-
-// ============================================
-// RUTA DE LA BASE DE DATOS
-// ============================================
-// Usar AppData (recomendado para producción)
-// const userDataPath = app.getPath('userData');
-
-// Usar una carpeta dentro del proyecto (para desarrollo)
-const userDataPath = path.join(process.cwd(), 'data');
-console.log('📁 userDataPath:', userDataPath);
-
-const dbPath = path.join(userDataPath, 'database.db');
-console.log('📁 dbPath:', dbPath);
-
-// Asegurar que la carpeta existe
-const dbDir = path.dirname(dbPath);
-console.log('📁 dbDir:', dbDir);
-
-if (!fs.existsSync(dbDir)) {
-  console.log('📁 Creando carpeta:', dbDir);
+// Backup al iniciar para proteger contra corrupción de la sesión anterior
+function realizarBackup(dbPath: string): void {
   try {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log('✅ Carpeta creada exitosamente');
+    const backupPath = dbPath.replace('.db', '.backup.db');
+    if (fs.existsSync(dbPath)) {
+      fs.copyFileSync(dbPath, backupPath);
+      console.log('Backup automático creado:', backupPath);
+    }
   } catch (err) {
-    console.error('❌ Error al crear carpeta:', err);
+    console.error('Error al crear backup:', err);
   }
-} else {
-  console.log('✅ Carpeta ya existe');
 }
 
-// Crear/abrir la base de datos
-console.log('📁 Creando/abriendo base de datos...');
+const userDataPath = app.getPath('userData');
+const dbPath = path.join(userDataPath, 'database.db');
+const dbDir = path.dirname(dbPath);
+
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+realizarBackup(dbPath);
 
 let db: Database.Database;
 
 try {
   db = new Database(dbPath);
-  console.log('✅ Base de datos abierta correctamente');
-  
-  // Habilitar Foreign Keys
+
   db.pragma('foreign_keys = ON');
-  console.log('✅ Foreign Keys habilitados');
+  db.pragma('journal_mode = WAL');
 
-  // ============================================
-  // CREAR TABLAS
-  // ============================================
-  console.log('📁 Creando tablas...');
-
-  // Tabla: Usuarios
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,18 +47,14 @@ try {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  console.log('✅ Tabla users creada/verificada');
 
-  // Migración: agregar username si no existe (bases de datos existentes)
+  // Migración: agregar columna username a BD existentes de versiones anteriores
   const tableInfo = db.prepare("PRAGMA table_info('users')").all() as Array<{ name: string }>;
   const hasUsernameColumn = tableInfo.some(col => col.name === 'username');
   if (!hasUsernameColumn) {
     try {
-      // Agregar columna sin UNIQUE primero (UNIQUE fallaría con datos existentes)
       db.exec(`ALTER TABLE users ADD COLUMN username TEXT NOT NULL DEFAULT ''`);
-      // Asignar usernames basados en el email (parte antes del @)
       db.exec(`UPDATE users SET username = LOWER(SUBSTR(email, 1, INSTR(email, '@') - 1)) WHERE username = ''`);
-      // Si hay duplicados, agregar sufijo numérico
       const duplicates = db.prepare(`
         SELECT username FROM users GROUP BY username HAVING COUNT(*) > 1
       `).all() as Array<{ username: string }>;
@@ -94,15 +67,12 @@ try {
             .run(dup.username, i + 1, dupsToFix[i].id);
         }
       }
-      console.log('✅ Columna username agregada a users');
+      console.log('Columna username agregada a users');
     } catch (err) {
-      console.error('❌ Error al migrar columna username:', err);
+      console.error('Error al migrar columna username:', err);
     }
-  } else {
-    console.log('✅ Columna username ya existe');
   }
 
-  // Tabla: Empresa/Negocio
   db.exec(`
     CREATE TABLE IF NOT EXISTS business (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,9 +87,7 @@ try {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  console.log('✅ Tabla business creada/verificada');
 
-  // Tabla: Productos
   db.exec(`
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,9 +106,7 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla products creada/verificada');
 
-  // Tabla: Clientes
   db.exec(`
     CREATE TABLE IF NOT EXISTS clients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,9 +122,7 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla clients creada/verificada');
 
-  // Tabla: Empleados
   db.exec(`
     CREATE TABLE IF NOT EXISTS employees (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -177,9 +141,7 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla employees creada/verificada');
 
-  // Tabla: Ventas
   db.exec(`
     CREATE TABLE IF NOT EXISTS sales (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -199,9 +161,7 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla sales creada/verificada');
 
-  // Tabla: Detalle de Ventas
   db.exec(`
     CREATE TABLE IF NOT EXISTS sale_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,9 +174,7 @@ try {
       FOREIGN KEY (product_id) REFERENCES products(id)
     )
   `);
-  console.log('✅ Tabla sale_items creada/verificada');
 
-  // Tabla: Proveedores
   db.exec(`
     CREATE TABLE IF NOT EXISTS suppliers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -236,9 +194,7 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla suppliers creada/verificada');
 
-  // Tabla: Gastos
   db.exec(`
     CREATE TABLE IF NOT EXISTS expenses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -256,9 +212,59 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla expenses creada/verificada');
 
-  // Tabla: Configuraciones
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      business_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (business_id) REFERENCES business(id)
+    )
+  `);
+
+  // Insertar categorías por defecto si no existen
+  const categoryCount = db.prepare('SELECT COUNT(*) as count FROM categories').get() as { count: number };
+  if (categoryCount.count === 0) {
+    const defaultCategories = [
+      'Camisas', 'Pantalones', 'Zapatos', 'Accesorios',
+      'Polos', 'Chaquetas', 'Vestidos', 'Ropa Interior', 'General'
+    ];
+    const insertCat = db.prepare('INSERT INTO categories (name) VALUES (?)');
+    for (const cat of defaultCategories) {
+      insertCat.run(cat);
+    }
+    console.log('Categorías por defecto creadas');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TABLA DE AUDITORÍA
+  // ═══════════════════════════════════════════════════════════
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      user_name TEXT NOT NULL DEFAULT 'Desconocido',
+      action TEXT NOT NULL,
+      details TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Migración: agregar columnas de bloqueo a users
+  const usersColumns = db.prepare("PRAGMA table_info('users')").all() as Array<{ name: string }>;
+  const hasLoginAttempts = usersColumns.some(col => col.name === 'login_attempts');
+  if (!hasLoginAttempts) {
+    try {
+      db.exec(`ALTER TABLE users ADD COLUMN login_attempts INTEGER DEFAULT 0`);
+      db.exec(`ALTER TABLE users ADD COLUMN locked_until DATETIME DEFAULT NULL`);
+      console.log('Columnas de bloqueo agregadas a users');
+    } catch (err) {
+      console.error('Error al migrar columnas de bloqueo:', err);
+    }
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -268,44 +274,63 @@ try {
       FOREIGN KEY (business_id) REFERENCES business(id)
     )
   `);
-  console.log('✅ Tabla settings creada/verificada');
 
-  // ============================================
-  // DATOS INICIALES
-  // ============================================
-  console.log('📁 Insertando datos iniciales...');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recibos (
+      id TEXT PRIMARY KEY,
+      numero TEXT NOT NULL,
+      fecha TEXT NOT NULL,
+      fecha_raw TEXT NOT NULL,
+      hora TEXT NOT NULL,
+      cliente TEXT NOT NULL DEFAULT 'Consumidor Final',
+      productos TEXT NOT NULL DEFAULT '[]',
+      subtotal REAL NOT NULL DEFAULT 0,
+      iva REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      metodo_pago TEXT NOT NULL DEFAULT 'Efectivo',
+      vendedor TEXT NOT NULL DEFAULT 'Vendedor',
+      negocio_nombre TEXT NOT NULL DEFAULT '',
+      negocio_ruc TEXT NOT NULL DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
-  // Verificar si hay usuarios
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_products_business ON products(business_id);
+    CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+    CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date);
+    CREATE INDEX IF NOT EXISTS idx_sales_business ON sales(business_id);
+    CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
+    CREATE INDEX IF NOT EXISTS idx_sale_items_product ON sale_items(product_id);
+    CREATE INDEX IF NOT EXISTS idx_clients_business ON clients(business_id);
+    CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name);
+    CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+    CREATE INDEX IF NOT EXISTS idx_expenses_business ON expenses(business_id);
+    CREATE INDEX IF NOT EXISTS idx_employees_business ON employees(business_id);
+    CREATE INDEX IF NOT EXISTS idx_suppliers_business ON suppliers(business_id);
+    CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+    CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+  `);
+
+  // ═══════════════════════════════════════════════════════════
+  // INICIALIZACIÓN: Solo crea lo esencial para que la app funcione.
+  // NO se crean datos de negocio, empleados ni seed data.
+  // El propietario configura todo desde la interfaz.
+  // ═══════════════════════════════════════════════════════════
+
+  // Crear usuario propietario si no existe ninguno
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-  console.log('📁 Usuarios existentes:', userCount.count);
 
   if (userCount.count === 0) {
     const hashPw = (pw: string) => bcrypt.hashSync(pw, 10);
     db.exec(`
       INSERT INTO users (name, username, email, password, role) VALUES 
-      ('Propietario', 'propietario', 'propietario@dajho.com', '${hashPw('propietario123')}', 'owner'),
-      ('Empleado', 'empleado', 'empleado@dajho.com', '${hashPw('empleado123')}', 'employee')
+      ('Propietario', 'propietario', 'propietario@dajho.com', '${hashPw('propietario123')}', 'owner')
     `);
-    console.log('✅ Usuarios creados (Propietario + Empleado)');
+    console.log('Usuario Propietario creado');
   } else {
-    console.log('✅ Usuarios ya existen');
-    // Migración: eliminar usuario admin si existe (sobrante de versiones anteriores)
-    const adminExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get('admin') as { count: number };
-    if (adminExists.count > 0) {
-      db.exec(`DELETE FROM users WHERE username = 'admin'`);
-      console.log('✅ Usuario admin eliminado (migración)');
-    }
-        // Migración: renombrar vendedor a empleado si aún tiene el nombre antiguo
-    const vendedorUser = db.prepare('SELECT id, password FROM users WHERE username = ?').get('vendedor') as { id: number; password: string } | undefined;
-    if (vendedorUser) {
-      const newPassword = vendedorUser.password.startsWith('$2')
-        ? vendedorUser.password  // ya está hasheada, mantenerla
-        : bcrypt.hashSync('empleado123', 10);  // texto plano → hash
-      db.prepare(`UPDATE users SET name = 'Empleado', username = 'empleado', email = 'empleado@dajho.com', password = ? WHERE id = ?`)
-        .run(newPassword, vendedorUser.id);
-      console.log('✅ Usuario vendedor migrado a empleado (contraseña preservada)');
-    }
-    // Migración: agregar Propietario si no existe (bases de datos existentes)
     const ownerExists = db.prepare('SELECT COUNT(*) as count FROM users WHERE username = ?').get('propietario') as { count: number };
     if (ownerExists.count === 0) {
       const hashPw = (pw: string) => bcrypt.hashSync(pw, 10);
@@ -313,69 +338,66 @@ try {
         INSERT INTO users (name, username, email, password, role) VALUES 
         ('Propietario', 'propietario', 'propietario@dajho.com', '${hashPw('propietario123')}', 'owner')
       `);
-      console.log('✅ Usuario Propietario agregado (migración)');
-    } else {
-      console.log('✅ Usuario Propietario ya existe');
+      console.log('Usuario Propietario agregado (migración)');
     }
   }
 
-  // Verificar si hay negocio
-  const businessCount = db.prepare('SELECT COUNT(*) as count FROM business').get() as { count: number };
-  console.log('📁 Negocios existentes:', businessCount.count);
-
-  if (businessCount.count === 0) {
-    db.exec(`
-      INSERT INTO business (name, owner, phone, email, address, city, ruc) VALUES 
-      ('Tienda de Ropa DAJHO', 'Tu Novia', '0987654321', 'tienda@dajho.com', 'Calle Principal 123', 'Quito', '1234567890001')
-    `);
-    console.log('✅ Negocio creado');
-  } else {
-    console.log('✅ Negocio ya existe');
-  }
-
-  // ============================================
-  // MIGRACIÓN: Sincronizar usuarios → empleados
-  // ============================================
-  const users = db.prepare('SELECT id, name, email, role FROM users').all() as Array<{ id: number; name: string; email: string; role: string }>;
-  for (const user of users) {
-    const exists = db.prepare('SELECT COUNT(*) as count FROM employees WHERE email = ?').get(user.email) as { count: number };
+  // Settings por defecto (solo los técnicamente necesarios)
+  const defaultSettings: Record<string, string> = {
+    iva_porcentaje: '12',
+    app_language: 'es',
+    recibo_secuencial: '0',
+  };
+  for (const [key, value] of Object.entries(defaultSettings)) {
+    const exists = db.prepare('SELECT COUNT(*) as count FROM settings WHERE key = ?').get(key) as { count: number };
     if (exists.count === 0) {
-      db.prepare(`
-        INSERT INTO employees (name, email, role, status, hire_date, salary, sales_count, notes)
-        VALUES (?, ?, ?, 'active', date('now'), 0, 0, '')
-      `).run(user.name, user.email, user.role === 'owner' ? 'owner' : 'employee');
-      console.log(`✅ Empleado creado para: ${user.name}`);
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(key, value);
     }
   }
 
-    // ============================================
-  // MIGRACIÓN GLOBAL: Asegurar que TODAS las contraseñas estén hasheadas
-  // ============================================
+  // Migración: resetear contador RIMPE si tiene un valor incorrecto (timestamp)
+  const rimpeRow = db.prepare("SELECT value FROM settings WHERE key = 'recibo_secuencial'").get() as { value: string } | undefined;
+  if (rimpeRow) {
+    const val = parseInt(rimpeRow.value, 10);
+    // Si el valor es mayor a 100000, es probable que sea un timestamp mal asignado
+    if (val > 100000 || isNaN(val) || val < 0) {
+      db.prepare("UPDATE settings SET value = '0' WHERE key = 'recibo_secuencial'").run();
+      console.log('Contador RIMPE reseteado a 0');
+    }
+  }
+
+  // Migración: agregar columna payment_reference a sales (para comprobante de transferencia)
+  const salesColumns = db.prepare("PRAGMA table_info('sales')").all() as Array<{ name: string }>;
+  const hasPaymentRef = salesColumns.some(col => col.name === 'payment_reference');
+  if (!hasPaymentRef) {
+    try {
+      db.exec(`ALTER TABLE sales ADD COLUMN payment_reference TEXT DEFAULT ''`);
+      console.log('Columna payment_reference agregada a sales');
+    } catch (err) {
+      console.error('Error al migrar columna payment_reference:', err);
+    }
+  }
+
+  // Migrar contraseñas legacy a bcrypt
   const plainPwUsers = db.prepare(
     "SELECT id, password FROM users WHERE password NOT LIKE '$2%'"
   ).all() as Array<{ id: number; password: string }>;
-  
+
   if (plainPwUsers.length > 0) {
-    console.log(`📁 Migrando ${plainPwUsers.length} contraseña(s) a bcrypt...`);
     for (const u of plainPwUsers) {
       const hashed = bcrypt.hashSync(u.password, 10);
       db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, u.id);
     }
-    console.log(`✅ ${plainPwUsers.length} contraseña(s) migradas a bcrypt`);
+    console.log(`Contraseñas migradas a bcrypt`);
   }
 
-  console.log('========================================');
-  console.log('✅ Base de datos inicializada en:', dbPath);
-  console.log('========================================');
+  console.log('Base de datos inicializada en:', dbPath);
 
 } catch (error) {
-  console.error('❌ Error al inicializar la base de datos:', error);
-  // Si hay error, creamos una base de datos vacía para que la app no falle
+  console.error('Error al inicializar la base de datos:', error);
+  // Fallback a BD en memoria para que la app no se caiga
   db = new Database(':memory:');
-  console.log('⚠️ Usando base de datos en memoria (temporal)');
+  console.log('Usando base de datos en memoria (temporal)');
 }
 
-// ============================================
-// ✅ EXPORTAR LA BASE DE DATOS (FUERA DEL TRY/CATCH)
-// ============================================
-export { db };
+export { db, dbPath };

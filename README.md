@@ -191,9 +191,8 @@ npm run dist
 | Usuario       | Contraseña        | Rol         | Acceso |
 | ------------- | ----------------- | ----------- | ------ |
 | `propietario` | `propietario123`  | `owner`     | 🔓 **Total** — puede ver, agregar, editar y eliminar en todos los módulos |
-| `empleado`    | `empleado123`     | `employee`  | 🔒 **Limitado** — solo ventas, recibos y cierre de caja |
 
-> 🔑 Puedes cambiar estas credenciales desde la pantalla de Configuraciones o directamente en la base de datos.
+> ⚠️ **Solo existe el usuario propietario por defecto.** Los empleados se crean desde el módulo **👥 Empleados**, donde el propietario les asigna usuario y contraseña para que puedan acceder al sistema con permisos limitados.
 
 ---
 

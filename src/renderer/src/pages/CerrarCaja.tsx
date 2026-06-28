@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { DollarSign, Crown, User, Calendar, BarChart3, Wallet, CreditCard, Building, Ban, Eye, EyeOff, Lightbulb } from 'lucide-react';
 
 interface Venta {
   id: number;
@@ -46,7 +47,7 @@ export const CerrarCaja = () => {
   }), [colors]);
   const { user } = useAuth();
   const [ventas, setVentas] = useState<Venta[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(
     new Date().toISOString().split('T')[0]
   );
@@ -88,7 +89,6 @@ export const CerrarCaja = () => {
   const totalVentas = ventasDelDia.reduce((sum, v) => sum + v.total, 0);
   const totalVentasCount = ventasDelDia.length;
 
-  // Formatear fecha
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-ES', {
@@ -98,19 +98,13 @@ export const CerrarCaja = () => {
     });
   };
 
-  // Formatear hora
-  const formatHora = (hora: string) => {
-    return hora;
-  };
-
-  // Método de pago emoji
-  const getMetodoEmoji = (metodo: string) => {
-    const emojis: Record<string, string> = {
-      efectivo: '💵',
-      tarjeta: '💳',
-      transferencia: '🏦',
-    };
-    return emojis[metodo?.toLowerCase()] || '💰';
+  const getMetodoIcon = (metodo: string) => {
+    switch (metodo?.toLowerCase()) {
+      case 'efectivo': return <DollarSign size={14} />;
+      case 'tarjeta': return <CreditCard size={14} />;
+      case 'transferencia': return <Building size={14} />;
+      default: return <Wallet size={14} />;
+    }
   };
 
   // Cerrar caja (simulado)
@@ -119,25 +113,29 @@ export const CerrarCaja = () => {
       alert('No hay ventas registradas para este día');
       return;
     }
-    alert(`✅ Caja cerrada exitosamente\n\n` +
-          `📅 Fecha: ${formatDate(fechaSeleccionada)}\n` +
-          `💰 Total ventas: $${totalVentas.toFixed(2)}\n` +
-          `💵 Efectivo: $${totalEfectivo.toFixed(2)}\n` +
-          `💳 Tarjeta: $${totalTarjeta.toFixed(2)}\n` +
-          `🏦 Transferencia: $${totalTransferencia.toFixed(2)}\n` +
-          `📊 Total ventas: ${totalVentasCount}`);
+    alert(`Caja cerrada exitosamente\n\n` +
+          `Fecha: ${formatDate(fechaSeleccionada)}\n` +
+          `Total ventas: $${totalVentas.toFixed(2)}\n` +
+          `Efectivo: $${totalEfectivo.toFixed(2)}\n` +
+          `Tarjeta: $${totalTarjeta.toFixed(2)}\n` +
+          `Transferencia: $${totalTransferencia.toFixed(2)}\n` +
+          `Total ventas: ${totalVentasCount}`);
+  };
+
+  const renderDetalleButton = () => {
+    if (showDetalle) return React.createElement('span', null, React.createElement(EyeOff, { size: 16, style: { marginRight: 6 } }), ' Ocultar detalle');
+    return React.createElement('span', null, React.createElement(Eye, { size: 16, style: { marginRight: 6 } }), ' Ver detalle de ventas');
   };
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>💰 Cerrar Caja</h1>
+      <h1 style={styles.title}><Wallet size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Cerrar Caja</h1>
       <p style={styles.subtitle}>
-        {user?.name} - {user?.role === 'owner' ? '👑 Propietario' : '👤 Empleado'}
+        {user?.name} - {user?.role === 'owner' ? 'Propietario' : 'Empleado'}
       </p>
 
-      {/* Selector de fecha */}
       <div style={styles.dateSelector}>
-        <label style={styles.dateLabel}>📅 Seleccionar fecha:</label>
+        <label style={styles.dateLabel}><Calendar size={16} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Seleccionar fecha:</label>
         <input
           type="date"
           value={fechaSeleccionada}
@@ -146,11 +144,10 @@ export const CerrarCaja = () => {
         />
       </div>
 
-      {/* Resumen de caja */}
       <div style={styles.resumenContainer}>
         <div style={styles.resumenHeader}>
           <h2 style={styles.resumenTitle}>
-            📊 Resumen del día - {formatDate(fechaSeleccionada)}
+            <BarChart3 size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Resumen del día - {formatDate(fechaSeleccionada)}
           </h2>
           <span style={styles.ventasCount}>
             {totalVentasCount} ventas
@@ -159,28 +156,28 @@ export const CerrarCaja = () => {
 
         <div style={styles.resumenGrid}>
           <div style={styles.resumenCard}>
-            <div style={styles.resumenIcon}>💰</div>
+            <DollarSign size={24} />
             <div>
               <div style={styles.resumenLabel}>Total ventas</div>
               <div style={styles.resumenTotal}>${totalVentas.toFixed(2)}</div>
             </div>
           </div>
           <div style={styles.resumenCard}>
-            <div style={styles.resumenIcon}>💵</div>
+            <DollarSign size={24} color="#22c55e" />
             <div>
               <div style={styles.resumenLabel}>Efectivo</div>
               <div style={styles.resumenTotalEfectivo}>${totalEfectivo.toFixed(2)}</div>
             </div>
           </div>
           <div style={styles.resumenCard}>
-            <div style={styles.resumenIcon}>💳</div>
+            <CreditCard size={24} color="#3b82f6" />
             <div>
               <div style={styles.resumenLabel}>Tarjeta</div>
               <div style={styles.resumenTotalTarjeta}>${totalTarjeta.toFixed(2)}</div>
             </div>
           </div>
           <div style={styles.resumenCard}>
-            <div style={styles.resumenIcon}>🏦</div>
+            <Building size={24} color="#8b5cf6" />
             <div>
               <div style={styles.resumenLabel}>Transferencia</div>
               <div style={styles.resumenTotalTransferencia}>${totalTransferencia.toFixed(2)}</div>
@@ -198,13 +195,13 @@ export const CerrarCaja = () => {
               ...(ventasDelDia.length === 0 ? styles.cerrarButtonDisabled : {})
             }}
           >
-            🛑 Cerrar caja
+            <Ban size={18} style={{ marginRight: 6 }} /> Cerrar caja
           </button>
           <button
             onClick={() => setShowDetalle(!showDetalle)}
             style={styles.detalleButton}
           >
-            {showDetalle ? '📋 Ocultar detalle' : '📋 Ver detalle de ventas'}
+            {renderDetalleButton()}
           </button>
         </div>
       </div>
@@ -212,7 +209,7 @@ export const CerrarCaja = () => {
       {/* Detalle de ventas */}
       {showDetalle && (
         <div style={styles.detalleContainer}>
-          <h3 style={styles.detalleTitle}>📋 Detalle de ventas</h3>
+          <h3 style={styles.detalleTitle}><BarChart3 size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Detalle de ventas</h3>
           {ventasDelDia.length === 0 ? (
             <div style={styles.emptyDetalle}>
               <p style={styles.emptyText}>No hay ventas registradas en esta fecha</p>
@@ -232,7 +229,7 @@ export const CerrarCaja = () => {
                   <span style={styles.detalleCell}>{venta.client_name || 'Consumidor Final'}</span>
                   <span style={styles.detalleCell}>{venta.items_count}</span>
                   <span style={styles.detalleCell}>
-                    {getMetodoEmoji(venta.payment_method)} {venta.payment_method}
+                    {getMetodoIcon(venta.payment_method)} {venta.payment_method}
                   </span>
                   <span style={styles.detalleCellTotal}>${venta.total.toFixed(2)}</span>
                 </div>
@@ -245,14 +242,13 @@ export const CerrarCaja = () => {
       {/* Mensaje de cierre */}
       <div style={styles.footerInfo}>
         <p style={styles.footerText}>
-          💡 Al cerrar caja, se registra el total del día y se reinicia el conteo para el siguiente día.
+          <Lightbulb size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} /> Al cerrar caja, se registra el total del día y se reinicia el conteo para el siguiente día.
         </p>
       </div>
     </div>
   );
 };
 
-// Estilos
 const baseStyles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '24px',

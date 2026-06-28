@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { applyThemeToStyles } from '../styles/theme';
-import { useProducts } from '../hooks/useDB';
+import { useProducts, useCategories, Product } from '../hooks/useDB';
 import * as XLSX from 'xlsx';
+import { Ban, Search, Edit, Trash2, Package, Crown, User, Upload, Download, Plus, FileText } from 'lucide-react';
 
 interface ProductForm {
   name: string;
@@ -26,8 +27,8 @@ const emptyForm = (): ProductForm => ({
 });
 
 export const Inventory = () => {
-  const { colors } = useTheme();
-  const themedStyles = applyThemeToStyles(baseStyles, colors, true);
+  const { colors, isDarkMode } = useTheme();
+  const themedStyles = applyThemeToStyles(baseStyles, colors, isDarkMode);
   const styles: Record<string, React.CSSProperties> = {
     ...themedStyles,
     searchInput: { ...themedStyles.searchInput, backgroundColor: colors.bgInput, color: colors.textHeading, border: `1px solid ${colors.borderInput}` },
@@ -42,6 +43,7 @@ export const Inventory = () => {
   };
   const { user, hasPermission } = useAuth();
   const { products, loadProducts, createProduct, updateProduct, deleteProduct, updateStock } = useProducts();
+  const { categories } = useCategories();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
@@ -60,7 +62,7 @@ export const Inventory = () => {
   if (!canView) {
     return (
       <div style={styles.unauthorizedContainer}>
-        <div style={styles.unauthorizedIcon}>🚫</div>
+        <Ban size={48} style={{ marginBottom: 16, color: '#ef4444' }} />
         <h2 style={styles.unauthorizedTitle}>Acceso denegado</h2>
         <p style={styles.unauthorizedText}>No tienes permisos para ver el inventario.</p>
         <p style={styles.unauthorizedSubtext}>Contacta al administrador si necesitas acceso.</p>
@@ -68,7 +70,6 @@ export const Inventory = () => {
     );
   }
 
-  // Calcular estadísticas
   const totalProducts = products.length;
   const totalInventoryCost = products.reduce((sum, p) => sum + (p.cost * p.stock), 0);
   const outOfStock = products.filter(p => p.stock === 0).length;
@@ -84,7 +85,6 @@ export const Inventory = () => {
     return matchesSearch;
   });
 
-  // Agregar producto (solo admin)
   const handleAddProduct = async () => {
     if (!canEdit) { alert('No tienes permisos para crear productos'); return; }
     if (!form.name || !form.price || !form.cost) {
@@ -96,7 +96,6 @@ export const Inventory = () => {
     setForm(emptyForm());
   };
 
-  // Editar producto (solo admin)
   const handleEditProduct = (product: any) => {
     if (!canEdit) { alert('No tienes permisos para editar productos'); return; }
     setEditingId(product.id);
@@ -112,6 +111,11 @@ export const Inventory = () => {
     setShowModal(true);
   };
 
+  const renderModalTitle = () => {
+    if (editingId) return React.createElement('span', null, React.createElement(Edit, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Editar producto');
+    return React.createElement('span', null, React.createElement(Package, { size: 18, style: { marginRight: 8, verticalAlign: 'middle' } }), ' Crear producto');
+  };
+
   const handleUpdateProduct = async () => {
     if (!editingId || !canEdit) return;
     await updateProduct(editingId, form);
@@ -120,7 +124,6 @@ export const Inventory = () => {
     setForm(emptyForm());
   };
 
-  // Eliminar producto (solo admin)
   const handleDeleteProduct = async (id: number) => {
     if (!canEdit) { alert('No tienes permisos para eliminar productos'); return; }
     if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
@@ -128,13 +131,11 @@ export const Inventory = () => {
     }
   };
 
-  // Actualizar stock (solo admin)
   const handleUpdateStock = async (id: number, newStock: number) => {
     if (!canEdit || newStock < 0) return;
     await updateStock(id, newStock);
   };
 
-  // Importar desde Excel
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -204,7 +205,7 @@ export const Inventory = () => {
 
       setImportStatus({
         loading: false,
-        message: `✅ Importación completa: ${imported} productos agregados${errors > 0 ? `, ${errors} errores` : ''}`,
+        message: `Importación completa: ${imported} productos agregados${errors > 0 ? `, ${errors} errores` : ''}`,
         success: errors === 0,
       });
 
@@ -214,7 +215,7 @@ export const Inventory = () => {
       const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
       setImportStatus({
         loading: false,
-        message: `❌ Error: ${errorMsg}`,
+        message: `Error: ${errorMsg}`,
         success: false,
       });
     }
@@ -261,10 +262,10 @@ export const Inventory = () => {
       const saved = await window.dajhoAPI.file.saveDialog('productos.xlsx', buffer);
 
       if (saved) {
-        alert('✅ Productos exportados correctamente');
+        alert('Productos exportados correctamente');
       }
     } catch (err) {
-      alert('❌ Error al exportar productos');
+      alert('Error al exportar productos');
       console.error(err);
     }
   };
@@ -272,7 +273,7 @@ export const Inventory = () => {
   // Renderizar acciones según rol
   const renderActions = (product: Product) => {
     if (!canEdit) {
-      return <span style={styles.readOnlyText}>🔍 Solo lectura</span>;
+      return <span style={styles.readOnlyText}><Search size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Solo lectura</span>;
     }
     return (
       <div style={styles.actionButtonsCell}>
@@ -281,14 +282,14 @@ export const Inventory = () => {
           style={styles.editButton}
           title="Editar producto"
         >
-          ✏️
+          <Edit size={14} />
         </button>
         <button
           onClick={() => handleDeleteProduct(product.id)}
           style={styles.deleteButton}
           title="Eliminar producto"
         >
-          🗑️
+          <Trash2 size={14} />
         </button>
       </div>
     );
@@ -296,7 +297,7 @@ export const Inventory = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>📦 Inventario</h1>
+      <h1 style={styles.title}><Package size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Inventario</h1>
 
       {/* Estadísticas */}
       <div style={styles.stats}>
@@ -313,7 +314,7 @@ export const Inventory = () => {
           <div style={styles.statLabel}>Sin stock</div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statValue}>{canEdit ? '👑 Propietario' : '👤 Solo lectura'}</div>
+          <div style={styles.statValue}>{canEdit ? 'Propietario' : 'Solo lectura'}</div>
           <div style={styles.statLabel}>Tu rol</div>
         </div>
       </div>
@@ -323,7 +324,7 @@ export const Inventory = () => {
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="🔍 Buscar por nombre..."
+            placeholder="Buscar por nombre..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
@@ -358,19 +359,19 @@ export const Inventory = () => {
               onClick={() => setShowImportModal(true)}
               style={styles.importButton}
             >
-              📂 Subir desde Excel
+              <Upload size={16} style={{ marginRight: 6 }} /> Subir desde Excel
             </button>
             <button
               onClick={handleExport}
               style={styles.exportButton}
             >
-              📤 Exportar
+              <Download size={16} style={{ marginRight: 6 }} /> Exportar
             </button>
             <button
               onClick={() => { setEditingId(null); setForm(emptyForm()); setShowModal(true); }}
               style={styles.addButton}
             >
-              ➕ Crear manualmente
+              <Plus size={16} style={{ marginRight: 6 }} /> Crear manualmente
             </button>
           </div>
         )}
@@ -472,7 +473,7 @@ export const Inventory = () => {
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             <h2 style={styles.modalTitle}>
-              {editingId ? '✏️ Editar producto' : '🆕 Crear producto'}
+              {renderModalTitle()}
             </h2>
             
             <div style={styles.modalForm}>
@@ -494,15 +495,13 @@ export const Inventory = () => {
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                     style={styles.formSelect}
                   >
-                    <option value="Camisas">Camisas</option>
-                    <option value="Pantalones">Pantalones</option>
-                    <option value="Vestidos">Vestidos</option>
-                    <option value="Chaquetas">Chaquetas</option>
-                    <option value="Sudaderas">Sudaderas</option>
-                    <option value="Blusas">Blusas</option>
-                    <option value="Faldas">Faldas</option>
-                    <option value="Accesorios">Accesorios</option>
-                    <option value="Calzado">Calzado</option>
+                    {categories.length === 0 ? (
+                      <option value="General">General</option>
+                    ) : (
+                      categories.map(cat => (
+                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -604,7 +603,7 @@ export const Inventory = () => {
       {showImportModal && canEdit && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
-            <h2 style={styles.modalTitle}>📂 Subir productos desde Excel</h2>
+            <h2 style={styles.modalTitle}><Upload size={20} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Subir productos desde Excel</h2>
             
             <div style={styles.importContent}>
               <p style={styles.importText}>
@@ -645,7 +644,7 @@ export const Inventory = () => {
               ) : (
                 <>
                   <div style={styles.importArea}>
-                    <div style={styles.importIcon}>📄</div>
+                    <FileText size={40} color={colors.textSecondary} style={{ marginBottom: 8 }} />
                     <p style={styles.importText}>
                       {importFileName ? `Archivo seleccionado: ${importFileName}` : 'Selecciona un archivo Excel (.xlsx o .xls)'}
                     </p>
@@ -670,7 +669,7 @@ export const Inventory = () => {
                       }}
                       disabled={!importFileName}
                     >
-                      📥 Importar
+                      <Download size={16} style={{ marginRight: 6 }} /> Importar
                     </button>
                   </div>
                 </>

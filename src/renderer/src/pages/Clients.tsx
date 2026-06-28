@@ -2,15 +2,18 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useClients } from '../hooks/useDB';
+import { Eye, Edit, Trash2, User, Plus, Search, Info, Crown, Users } from 'lucide-react';
 
 interface ClientForm {
   name: string;
   phone: string;
   email: string;
   document: string;
+  total_debt: number;
+  total_purchases: number;
 }
 
-const emptyForm = (): ClientForm => ({ name: '', phone: '', email: '', document: '' });
+const emptyForm = (): ClientForm => ({ name: '', phone: '', email: '', document: '', total_debt: 0, total_purchases: 0 });
 
 export const Clients = () => {
   const { colors } = useTheme();
@@ -42,7 +45,7 @@ export const Clients = () => {
     infoMessage: { ...baseStyles.infoMessage, backgroundColor: colors.bgTertiary, color: colors.textSecondary },
   }), [colors]);
   const { user } = useAuth();
-  const { clients, createClient, updateClient, deleteClient } = useClients();
+  const { clients, createClient, updateClient } = useClients();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -71,7 +74,7 @@ export const Clients = () => {
   const handleEditClient = (client: any) => {
     if (!canEdit) { alert('No tienes permisos para editar clientes'); return; }
     setEditingId(client.id);
-    setForm({ name: client.name || '', phone: client.phone || '', email: client.email || '', document: client.document || '' });
+    setForm({ name: client.name || '', phone: client.phone || '', email: client.email || '', document: client.document || '', total_debt: client.total_debt || 0, total_purchases: client.total_purchases || 0 });
     setShowModal(true);
   };
 
@@ -86,14 +89,12 @@ export const Clients = () => {
   const handleDeleteClient = async (id: number) => {
     if (!canEdit) { alert('No tienes permisos para eliminar clientes'); return; }
     if (window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
-      setClients(clients.filter(c => c.id !== id));
+      await window.dajhoAPI.clients.delete(id);
     }
   };
 
-  // Resetear formulario
   const resetForm = () => { setForm(emptyForm()); };
 
-  // Formatear fecha
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-ES', {
@@ -103,10 +104,9 @@ export const Clients = () => {
     });
   };
 
-  // Renderizar acciones según rol
-  const renderActions = (client: Client) => {
+  const renderActions = (client: any) => {
     if (!canEdit) {
-      return <span style={styles.readOnlyText}>👀 Ver</span>;
+      return <span style={styles.readOnlyText}><Eye size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Ver</span>;
     }
     return (
       <div style={styles.actionButtonsCell}>
@@ -130,30 +130,28 @@ export const Clients = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>👤 Clientes</h1>
+      <h1 style={styles.title}><User size={24} style={{ marginRight: 10, verticalAlign: 'middle' }} /> Clientes</h1>
 
-      {/* Estadísticas */}
       <div style={styles.stats}>
         <div style={styles.statCard}>
           <div style={styles.statValue}>{totalClients}</div>
           <div style={styles.statLabel}>Total de clientes</div>
-        </div>
+        </div> 
         <div style={styles.statCard}>
           <div style={styles.statValue}>${totalDebt.toFixed(2)}</div>
           <div style={styles.statLabel}>Total por cobrar</div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statValue}>{canEdit ? '👑 Propietario' : '👤 Empleado'}</div>
+          <div style={styles.statValue}>{canEdit ? 'Propietario' : 'Empleado'}</div>
           <div style={styles.statLabel}>Tu rol</div>
         </div>
       </div>
 
-      {/* Acciones */}
       <div style={styles.actions}>
         <div style={styles.searchWrapper}>
           <input
             type="text"
-            placeholder="🔍 Buscar por nombre, teléfono o documento..."
+            placeholder="Buscar por nombre, teléfono o documento..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={styles.searchInput}
@@ -165,11 +163,10 @@ export const Clients = () => {
           onClick={() => { setEditingId(null); setForm(emptyForm()); setShowModal(true); }}
           style={styles.addButton}
         >
-          ➕ Nuevo cliente
+          <Plus size={18} style={{ marginRight: 6 }} /> Nuevo cliente
         </button>
       </div>
 
-      {/* Tabla de clientes */}
       <div style={styles.tableContainer}>
         {filteredClients.length === 0 ? (
           <div style={styles.emptyState}>
@@ -203,13 +200,13 @@ export const Clients = () => {
                   <span style={styles.emailText}>{client.email || '-'}</span>
                 </div>
                 <div style={styles.tableCell}>{client.document || '-'}</div>
-                <div style={styles.tableCell}>{formatDate(client.createdAt)}</div>
+                <div style={styles.tableCell}>{formatDate(client.created_at)}</div>
                 <div style={styles.tableCell}>
                   <span style={{
                     ...styles.debtBadge,
-                    ...(client.totalDebt > 0 ? styles.debtBadgePositive : styles.debtBadgeZero)
+                    ...((client.total_debt || 0) > 0 ? styles.debtBadgePositive : styles.debtBadgeZero)
                   }}>
-                    ${client.totalDebt.toFixed(2)}
+                    $${(client.total_debt || 0).toFixed(2)}
                   </span>
                 </div>
                 <div style={styles.tableCell}>
@@ -226,13 +223,12 @@ export const Clients = () => {
         )}
       </div>
 
-      {/* Modal para crear/editar cliente */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
-            <h2 style={styles.modalTitle}>
-              {editingId ? '✏️ Editar cliente' : '🆕 Nuevo cliente'}
-            </h2>
+            <div style={styles.modalTitle}>
+              {editingId ? (<span><Edit size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Editar cliente </span>) : (<span><User size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Nuevo cliente </span>)}
+            </div>
             
             <div style={styles.modalForm}>
               <div style={styles.formRow}>
@@ -288,8 +284,8 @@ export const Clients = () => {
                     <input
                       type="number"
                       placeholder="0.00"
-                      value={form.totalDebt !== undefined ? form.totalDebt : ''}
-                      onChange={(e) => setForm({ ...form, totalDebt: parseFloat(e.target.value) || 0 })}
+                      value={form.total_debt !== undefined ? form.total_debt : ''}
+                      onChange={(e) => setForm({ ...form, total_debt: parseFloat(e.target.value) || 0 })}
                       style={styles.formInput}
                       min="0"
                       step="0.01"
@@ -300,8 +296,8 @@ export const Clients = () => {
                     <input
                       type="number"
                       placeholder="0.00"
-                      value={form.totalPurchases !== undefined ? form.totalPurchases : ''}
-                      onChange={(e) => setForm({ ...form, totalPurchases: parseFloat(e.target.value) || 0 })}
+                      value={form.total_purchases !== undefined ? form.total_purchases : ''}
+                      onChange={(e) => setForm({ ...form, total_purchases: parseFloat(e.target.value) || 0 })}
                       style={styles.formInput}
                       min="0"
                       step="0.01"
@@ -312,7 +308,7 @@ export const Clients = () => {
 
               {!canEdit && (
                 <div style={styles.infoMessage}>
-                  <span style={styles.infoIcon}>ℹ️</span>
+                  <Info size={16} style={{ marginRight: 6, flexShrink: 0 }} />
                   <span style={styles.infoText}>Los campos de deuda y compras solo pueden ser editados por el propietario.</span>
                 </div>
               )}
@@ -343,7 +339,6 @@ export const Clients = () => {
   );
 };
 
-// Estilos
 const baseStyles: { [key: string]: React.CSSProperties } = {
   container: {
     padding: '24px',

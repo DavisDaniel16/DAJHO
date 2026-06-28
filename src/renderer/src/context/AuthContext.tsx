@@ -1,4 +1,8 @@
-import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback, useRef, ReactNode } from 'react';
+
+// Constantes de inactividad
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutos
+const WARNING_BEFORE = 60 * 1000; // 1 minuto antes
 
 // Definir tipos
 export interface User {
@@ -17,17 +21,19 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   hasPermission: (module: string) => boolean;
+  inactivityWarning: boolean;
+  resetInactivityTimer: () => void;
 }
 
-// ✅ PERMISOS
+// PERMISOS
 const PERMISSIONS: Record<string, string[]> = {
   owner: [
-    'vender', 'balance', 'estadisticas', 'inventario', 
+    'dashboard', 'vender', 'balance', 'estadisticas', 'inventario', 
     'gastos', 'empleados', 'clientes', 'proveedores', 
-    'configuraciones', 'ayuda', 'cerrar-caja', 'recibos'
+    'configuraciones', 'ayuda', 'cerrar-caja', 'recibos', 'categorias'
   ],
   employee: [
-    'vender',
+    'dashboard', 'vender',
     'cerrar-caja',
     'recibos'  
   ],
@@ -38,31 +44,83 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [inactivityWarning, setInactivityWarning] = useState(false);
+  const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Limpia el timer de inactividad
+  const clearInactivityTimer = useCallback(() => {
+    if (inactivityRef.current) {
+      clearTimeout(inactivityRef.current);
+      inactivityRef.current = null;
+    }
+  }, []);
+
+  // Reinicia el timer de inactividad
+  const resetInactivityTimer = useCallback(() => {
+    if (!user) return;
+    clearInactivityTimer();
+    setInactivityWarning(false);
+
+    // Mostrar advertencia 1 minuto antes
+    inactivityRef.current = setTimeout(() => {
+      setInactivityWarning(true);
+    }, INACTIVITY_TIMEOUT - WARNING_BEFORE);
+  }, [user, clearInactivityTimer]);
+
+  // Configurar listeners de actividad global
+  useEffect(() => {
+    if (!user) return;
+
+    const activityEvents = ['mousedown', 'keydown', 'mousemove', 'touchstart', 'scroll'];
+    const handleActivity = () => resetInactivityTimer();
+
+    activityEvents.forEach(event => window.addEventListener(event, handleActivity));
+    resetInactivityTimer();
+
+    return () => {
+      activityEvents.forEach(event => window.removeEventListener(event, handleActivity));
+      clearInactivityTimer();
+    };
+  }, [user, resetInactivityTimer, clearInactivityTimer]);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('dajho_user');
+    const storedUser = sessionStorage.getItem('dajho_user');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
+        // Restaurar sesión en el main process
+        window.dajhoAPI.session.login(parsedUser).catch(() => {});
       } catch {
-        localStorage.removeItem('dajho_user');
+        sessionStorage.removeItem('dajho_user');
       }
     }
     setIsLoading(false);
   }, []);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<boolean | string> => {
     setIsLoading(true);
 
     try {
       const userData = await window.dajhoAPI.users.login(username.toLowerCase().trim(), password);
-      if (!userData) {
+      
+      // Cuenta bloqueada
+      if (userData?.blocked) {
+        setIsLoading(false);
+        return userData.message || 'Cuenta bloqueada';
+      }
+      
+      // Validar que userData sea un objeto de usuario real (con id y role),
+      // no un { success: false, error: '...' } de handleError
+      if (!userData || !userData.id || !userData.role) {
         setIsLoading(false);
         return false;
       }
-      setUser(userData as User);
-      localStorage.setItem('dajho_user', JSON.stringify(userData));
+      const validUser = userData as User;
+      setUser(validUser);
+      sessionStorage.setItem('dajho_user', JSON.stringify(validUser));
+      // Establecer sesión en el main process (para validación de permisos)
+      await window.dajhoAPI.session.login(validUser).catch(() => {});
       setIsLoading(false);
       return true;
     } catch (err) {
@@ -73,8 +131,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
+    clearInactivityTimer();
+    setInactivityWarning(false);
+    // Cerrar sesión en el main process
+    window.dajhoAPI.session.logout().catch(() => {});
     setUser(null);
-    localStorage.removeItem('dajho_user');
+    sessionStorage.removeItem('dajho_user');
   };
 
   const hasPermission = (module: string): boolean => {
@@ -91,6 +153,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       login,
       logout,
       hasPermission,
+      inactivityWarning,
+      resetInactivityTimer,
     }}>
       {children}
     </AuthContext.Provider>

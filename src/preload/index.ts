@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   // PRODUCTOS
   // ============================================
   products: {
-    getAll: () => ipcRenderer.invoke('db:products:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:products:getAll', limit, offset),
     getById: (id: number) => ipcRenderer.invoke('db:products:getById', id),
     create: (data: any) => ipcRenderer.invoke('db:products:create', data),
     update: (id: number, data: any) => ipcRenderer.invoke('db:products:update', id, data),
@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   // CLIENTES
   // ============================================
   clients: {
-    getAll: () => ipcRenderer.invoke('db:clients:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:clients:getAll', limit, offset),
     getById: (id: number) => ipcRenderer.invoke('db:clients:getById', id),
     create: (data: any) => ipcRenderer.invoke('db:clients:create', data),
     update: (id: number, data: any) => ipcRenderer.invoke('db:clients:update', id, data),
@@ -32,18 +32,20 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   // VENTAS
   // ============================================
   sales: {
-    getAll: () => ipcRenderer.invoke('db:sales:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:sales:getAll', limit, offset),
     getById: (id: number) => ipcRenderer.invoke('db:sales:getById', id),
     create: (data: any) => ipcRenderer.invoke('db:sales:create', data),
-    getByDate: (date: string) => ipcRenderer.invoke('db:sales:getByDate', date),
-    getByDateRange: (start: string, end: string) => ipcRenderer.invoke('db:sales:getByDateRange', start, end),
+    update: (id: number, data: any) => ipcRenderer.invoke('db:sales:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('db:sales:delete', id),
+    getByDate: (date: string, limit?: number, offset?: number) => ipcRenderer.invoke('db:sales:getByDate', date, limit, offset),
+    getByDateRange: (start: string, end: string, limit?: number, offset?: number) => ipcRenderer.invoke('db:sales:getByDateRange', start, end, limit, offset),
   },
 
   // ============================================
   // EMPLEADOS
   // ============================================
   employees: {
-    getAll: () => ipcRenderer.invoke('db:employees:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:employees:getAll', limit, offset),
     getById: (id: number) => ipcRenderer.invoke('db:employees:getById', id),
     create: (data: any) => ipcRenderer.invoke('db:employees:create', data),
     update: (id: number, data: any) => ipcRenderer.invoke('db:employees:update', id, data),
@@ -54,7 +56,7 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   // PROVEEDORES
   // ============================================
   suppliers: {
-    getAll: () => ipcRenderer.invoke('db:suppliers:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:suppliers:getAll', limit, offset),
     getById: (id: number) => ipcRenderer.invoke('db:suppliers:getById', id),
     create: (data: any) => ipcRenderer.invoke('db:suppliers:create', data),
     update: (id: number, data: any) => ipcRenderer.invoke('db:suppliers:update', id, data),
@@ -65,10 +67,35 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   // GASTOS
   // ============================================
   expenses: {
-    getAll: () => ipcRenderer.invoke('db:expenses:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:expenses:getAll', limit, offset),
+    getById: (id: number) => ipcRenderer.invoke('db:expenses:getById', id),
     create: (data: any) => ipcRenderer.invoke('db:expenses:create', data),
     update: (id: number, data: any) => ipcRenderer.invoke('db:expenses:update', id, data),
     delete: (id: number) => ipcRenderer.invoke('db:expenses:delete', id),
+  },
+
+  // ============================================
+  // CATEGORÍAS
+  // ============================================
+  categories: {
+    getAll: () => ipcRenderer.invoke('db:categories:getAll'),
+    create: (data: any) => ipcRenderer.invoke('db:categories:create', data),
+    update: (id: number, data: any) => ipcRenderer.invoke('db:categories:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('db:categories:delete', id),
+  },
+
+  // ============================================
+  // AUDITORÍA
+  // ============================================
+  audit: {
+    getLogs: (limit?: number, offset?: number) => ipcRenderer.invoke('db:audit:getLogs', limit, offset),
+  },
+
+  // ============================================
+  // DASHBOARD
+  // ============================================
+  dashboard: {
+    getSummary: () => ipcRenderer.invoke('db:dashboard:summary'),
   },
 
   // ============================================
@@ -85,9 +112,14 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   // ============================================
   users: {
     getByEmail: (email: string) => ipcRenderer.invoke('db:users:getByEmail', email),
-    getAll: () => ipcRenderer.invoke('db:users:getAll'),
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:users:getAll', limit, offset),
     login: (username: string, password: string) => ipcRenderer.invoke('db:users:login', username, password),
     create: (data: any) => ipcRenderer.invoke('db:users:create', data),
+    update: (id: number, data: any) => ipcRenderer.invoke('db:users:update', id, data),
+    findByUsername: (username: string) => ipcRenderer.invoke('db:users:findByUsername', username),
+    unlock: (userId: number) => ipcRenderer.invoke('db:users:unlock', userId),
+    getLocked: () => ipcRenderer.invoke('db:users:getLocked'),
+    delete: (id: number) => ipcRenderer.invoke('db:users:delete', id),
   },
 
   // ============================================
@@ -96,6 +128,53 @@ contextBridge.exposeInMainWorld('dajhoAPI', {
   business: {
     getFirst: () => ipcRenderer.invoke('db:business:getFirst'),
     update: (data: any) => ipcRenderer.invoke('db:business:update', data),
+  },
+
+  // ============================================
+  // RECIBOS (SQLite)
+  // ============================================
+  recibos: {
+    getAll: (limit?: number, offset?: number) => ipcRenderer.invoke('db:recibos:getAll', limit, offset),
+    getById: (id: string) => ipcRenderer.invoke('db:recibos:getById', id),
+    save: (recibo: any) => ipcRenderer.invoke('db:recibos:save', recibo),
+    search: (query: string, limit?: number, offset?: number) => ipcRenderer.invoke('db:recibos:search', query, limit, offset),
+    delete: (id: string) => ipcRenderer.invoke('db:recibos:delete', id),
+    nextNumero: () => ipcRenderer.invoke('db:recibos:nextNumero'),
+  },
+
+  // ============================================
+  // SISTEMA
+  // ============================================
+  system: {
+    getDbPath: () => ipcRenderer.invoke('db:system:getDbPath'),
+  },
+
+  // ============================================
+  // BACKUP
+  // ============================================
+  backup: {
+    manual: () => ipcRenderer.invoke('db:backup:manual'),
+    restore: () => ipcRenderer.invoke('db:backup:restore'),
+    info: () => ipcRenderer.invoke('db:backup:info'),
+  },
+
+  // ============================================
+  // UTILIDADES (permisos, sistema)
+  // ============================================
+  utils: {
+    validatePermission: (channel: string, userRole: string) =>
+      ipcRenderer.invoke('db:utils:validatePermission', channel, userRole),
+    getPermissionsMap: () => ipcRenderer.invoke('db:utils:getPermissionsMap'),
+    verifyPassword: (password: string) => ipcRenderer.invoke('db:utils:verifyPassword', password),
+  },
+
+  // ============================================
+  // SESIÓN
+  // ============================================
+  session: {
+    login: (user: any) => ipcRenderer.invoke('db:session:login', user),
+    logout: () => ipcRenderer.invoke('db:session:logout'),
+    get: () => ipcRenderer.invoke('db:session:get'),
   },
 
   // ============================================

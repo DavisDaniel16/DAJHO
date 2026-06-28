@@ -4,7 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:; font-src 'self'" />
     <title>DAJHO</title>
+    <script>
+      // Prevenir flash de blanco — document.write es síncrono, se aplica antes del primer paint
+      (function() {
+        var isDark = localStorage.getItem('dajho_darkMode') === 'true';
+        var bg = isDark ? '#0f1729' : '#f5f7fa';
+        document.write('<style>html,body{background-color:'+bg+' !important;}#root{background-color:'+bg+' !important;}<\/style>');
+        if (isDark) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
