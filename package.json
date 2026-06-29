@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "description": "DAJHO - Gestión completa para tu negocio en laptop",
   "author": {
-    "name": "Tu nombre",
-    "email": "tuemail@ejemplo.com"
+    "name": "DAJHO",
+    "email": "dajho@ejemplo.com"
   },
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -32,7 +32,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "icon/DAJHO-WHITE.ico"
     },
     "mac": {
       "target": "dmg",
@@ -52,8 +52,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "DAJHO",
       "deleteAppDataOnUninstall": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
+      "installerIcon": "icon/DAJHO-WHITE.ico",
+      "uninstallerIcon": "icon/DAJHO-WHITE.ico",
       "license": null
     },
     "extraResources": [

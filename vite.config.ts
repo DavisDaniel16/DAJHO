@@ -11,12 +11,16 @@ function antiFlashPlugin(): Plugin {
       const script = `
     <script>
       (function() {
-        var isDark = localStorage.getItem('dajho_darkMode') === 'true';
-        var bg = isDark ? '#0f1729' : '#f5f7fa';
-        document.write('<style>html,body{background-color:'+bg+' !important;}#root{background-color:'+bg+' !important;}<\\/style>');
-        if (isDark) {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        }
+        try {
+          var isDark = localStorage.getItem('dajho_darkMode') === 'true';
+          var bg = isDark ? '#0f1729' : '#f5f7fa';
+          var style = document.createElement('style');
+          style.textContent = 'html,body{background-color:'+bg+' !important;}#root{background-color:'+bg+' !important;}';
+          document.head.appendChild(style);
+          if (isDark) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+          }
+        } catch(e) {}
       })();
     </script>`;
       return html.replace('</head>', script + '</head>');

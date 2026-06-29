@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { Login } from './pages/Login';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Carga diferida (lazy) para reducir tamaño del bundle inicial
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -258,15 +259,17 @@ const AppContent = () => {
 // App principal
 function App() {
   return (
-    <HashRouter>
-      <ThemeProvider>
-        <SidebarProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-        </SidebarProvider>
-      </ThemeProvider>
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <ThemeProvider>
+          <SidebarProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+          </SidebarProvider>
+        </ThemeProvider>
+      </HashRouter>
+    </ErrorBoundary>
   );
 }
 
