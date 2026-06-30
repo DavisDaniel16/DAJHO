@@ -1,0 +1,7 @@
+﻿node_modules/
+dist/
+dist-electron/
+release/
+data/
+.env
+.continue/

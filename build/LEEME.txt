@@ -1,0 +1,22 @@
+═══════════════════════════════════════════════════════════
+          DAJHO - GUÍA DE INSTALACIÓN
+═══════════════════════════════════════════════════════════
+
+VERSIONES DISPONIBLES:
+  • DAJHO 1.T (Tienda)       - Gestión general
+  • DAJHO 1.R (Ropa)         - Especializado en prendas
+  • DAJHO 1.F (Ferretería)   - Especializado en ferretería
+
+REQUISITOS:
+  • Windows 10/11 (64 bits)
+  • 4GB RAM mínimo
+  • 500MB espacio en disco
+
+INSTALACIÓN:
+  1. Ejecutar DAJHO-Setup-*.exe
+  2. Seguir el asistente
+  3. Al abrir por primera vez, crear el negocio
+
+CRÉDITOS:
+  DAJHO - Gestión completa para tu negocio
+  © 2026 DAJHO. Todos los derechos reservados.

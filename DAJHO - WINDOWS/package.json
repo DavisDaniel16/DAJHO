@@ -1,0 +1,103 @@
+{
+  "name": "dajho-desktop",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "DAJHO - Gestión completa para tu negocio en laptop",
+  "author": {
+    "name": "DAJHO",
+    "email": "dajho@ejemplo.com"
+  },
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "dev": "pnpm run build:electron && concurrently -k \"vite --port 5173\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev:tienda": "cross-env DAJHO_TYPE=tienda pnpm dev",
+    "dev:ropa": "cross-env DAJHO_TYPE=ropa pnpm dev",
+    "dev:ferreteria": "cross-env DAJHO_TYPE=ferreteria pnpm dev",
+    "dev:direct": "cross-env NODE_ENV=development electron .",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json && tsc -p tsconfig.preload.json",
+    "build": "pnpm run build:electron && pnpm run build:renderer",
+    "start": "pnpm run build && npx electron .",
+    "preview": "vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "pnpm run build && electron-builder",
+    "dist:tienda": "cross-env DAJHO_TYPE=tienda pnpm run build && electron-builder --config release-config-tienda.json",
+    "dist:ropa": "cross-env DAJHO_TYPE=ropa pnpm run build && electron-builder --config release-config-ropa.json",
+    "dist:ferreteria": "cross-env DAJHO_TYPE=ferreteria pnpm run build && electron-builder --config release-config-ferreteria.json"
+  },
+  "build": {
+    "appId": "com.dajho.desktop",
+    "productName": "DAJHO",
+    "copyright": "Copyright © 2026 DAJHO",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon/DAJHO-WHITE.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns",
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DAJHO",
+      "deleteAppDataOnUninstall": true,
+      "installerIcon": "icon/DAJHO-WHITE.ico",
+      "uninstallerIcon": "icon/DAJHO-WHITE.ico",
+      "license": null
+    },
+    "extraResources": [
+      {
+        "from": "build/",
+        "to": "build/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/react-pdf": "^5.0.7",
+    "@types/xlsx": "^0.0.35",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.2.0",
+    "cross-env": "^10.1.0",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.3.0",
+    "vite": "^7.2.7",
+    "wait-on": "^7.0.0"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
+    "electron-log": "^5.4.4",
+    "lucide-react": "^1.21.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.26.0",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
+  }
+}
