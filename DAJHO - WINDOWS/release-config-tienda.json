@@ -1,0 +1,29 @@
+{
+  "appId": "com.dajho.tienda",
+  "productName": "DAJHO Tienda",
+  "copyright": "Copyright © 2026 DAJHO",
+  "directories": {
+    "output": "release/tienda"
+  },
+  "files": [
+    "dist-electron/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "icon/DAJHO-WHITE.ico",
+    "artifactName": "DAJHO-Tienda-Setup-${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "DAJHO Tienda",
+    "deleteAppDataOnUninstall": true,
+    "installerIcon": "icon/DAJHO-WHITE.ico",
+    "uninstallerIcon": "icon/DAJHO-WHITE.ico",
+    "uninstallDisplayName": "DAJHO Tienda ${version}"
+  }
+}

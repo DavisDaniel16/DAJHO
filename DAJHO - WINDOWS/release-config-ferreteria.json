@@ -1,0 +1,29 @@
+{
+  "appId": "com.dajho.ferreteria",
+  "productName": "DAJHO Ferretería",
+  "copyright": "Copyright © 2026 DAJHO",
+  "directories": {
+    "output": "release/ferreteria"
+  },
+  "files": [
+    "dist-electron/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "icon/DAJHO-WHITE.ico",
+    "artifactName": "DAJHO-Ferreteria-Setup-${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "DAJHO Ferretería",
+    "deleteAppDataOnUninstall": true,
+    "installerIcon": "icon/DAJHO-WHITE.ico",
+    "uninstallerIcon": "icon/DAJHO-WHITE.ico",
+    "uninstallDisplayName": "DAJHO Ferretería ${version}"
+  }
+}

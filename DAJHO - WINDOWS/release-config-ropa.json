@@ -1,0 +1,29 @@
+{
+  "appId": "com.dajho.ropa",
+  "productName": "DAJHO Ropa",
+  "copyright": "Copyright © 2026 DAJHO",
+  "directories": {
+    "output": "release/ropa"
+  },
+  "files": [
+    "dist-electron/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis",
+    "icon": "icon/DAJHO-WHITE.ico",
+    "artifactName": "DAJHO-Ropa-Setup-${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "DAJHO Ropa",
+    "deleteAppDataOnUninstall": true,
+    "installerIcon": "icon/DAJHO-WHITE.ico",
+    "uninstallerIcon": "icon/DAJHO-WHITE.ico",
+    "uninstallDisplayName": "DAJHO Ropa ${version}"
+  }
+}
